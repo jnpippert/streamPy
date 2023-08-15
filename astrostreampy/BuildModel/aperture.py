@@ -12,35 +12,52 @@ def fwhm_mask_from_paramtab():
 
 def std_mask_from_paramtab(
     parameter_file: str, multifits_file: str, k: int = 3, smoothing: int = 10
-):
+) -> np.ndarray:
+    """
+    Creates an aperture mask from the parameter FITS table.
+
+    Parameters
+    ----------
+    parameter_file : str or path-like
+        Name of the parameter FITS table.
+
+    multifits_file : str or path-like
+        Name of the mulit FITS file.
+
+    k : int, optional
+        Kappa value for mask creation. How much is set to zero k * sigma from the center.
+        Default is 3.
+
+    smoothing : int, optional
+        Smoothing factor of the standard deviations. Default 25 means that 25 values before and after
+        the current slice are meaned.
+
+    Raises
+    ------
+    KeyErrors if some of the keys are not found in the FITS header extension.
+
+    Returns
+    -------
+    mask : np.ndarray
+        Data array of the aperture mask.
+
+    """
     table = fits.getdata(parameter_file, ext=1)
     data, header = fits.getdata(multifits_file, ext=0, header=True)
     mask = np.zeros(data.shape)
 
     header["PXSCALE"] = 0.2
-    try:
-        filter = header["FILTER"]  # Filter band the image was taken in.
-    except KeyError:
-        raise ValueError("No header keyword 'FILTER' found.")
 
-    try:
-        pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
-    except:
-        raise ValueError("No header keyword 'PXSCALE' found.")
-
-    try:
-        psf = header[
-            "PSF"
-        ]  # PSF has to be the mean FWHM in arcseconds of all image PSF's.
-        seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
-    except:
-        raise ValueError("No header keyword 'PSF' found.")  # noqa707
+    filter_band = header["FILTER"]  # Filter band the image was taken in.
+    pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
+    psf = header["PSF"]  # PSF has to be the mean FWHM in arcseconds of all image PSF's.
+    seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
 
     print(f"using psf fhwm: {psf} [arcsec]")
     print(f"using pxscale: {pxscale} [arcsec / pixel]")
     print(f"using seeing: {seeing} [pixel]")
 
-    sigmas = table[f"sigma_{filter}"]
+    sigmas = table[f"sigma_{filter_band}"]
     for orientation in ["horizontal", "vertical"]:
         tmp_mask = np.zeros(mask.shape)
         for i, row in enumerate(table):

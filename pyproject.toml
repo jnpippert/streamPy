@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0","astropy>=5.3.1","scipy>=1.11.1","numpy>=1.25.2","matplotlib>=3.7.2","lmfit>=1.2.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
