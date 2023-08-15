@@ -22,7 +22,7 @@ class Box:
         width: int,
         height: int,
         seeing: float,
-        init: list = [0, 1, 1, 0, 0, 0, 0, 0, 0],
+        init: list = None,
         h2: bool = False,
         skew: bool = False,
         h4: bool = False,
@@ -67,6 +67,9 @@ class Box:
         fix_bg : float, optional
             Sets the offset/background to a fixed value and turns off offset fitting. Default is ``None``.
         """
+
+        if init is None:
+            init = [0, 1, 1, 0, 0, 0, 0, 0, 0]
 
         self._psf = Gaussian1DKernel(stddev=seeing)
         data = original_data.copy()[y - height : y + height, x - width : x + width]
@@ -134,19 +137,33 @@ class Box:
 
         self._func_params = func_params
         self._func_model = func_model
+        self._nan_policy = True
+
+        self.angle = None
+        self.sigma = None
+        self.norm = None
+        self.offset = None
+        self.x0 = None
+        self.y0 = None
+        self.h2v = None
+        self.skewv = None
+        self.h4v = None
+        self.model = None
+        self.norm_err = None
+        self.peak_pos = None
 
     def _fitfunc(
         self,
-        xy: np.ndarray,
-        angle: float,
-        sigma: float,
-        norm: float,
-        offset: float,
-        x0: float,
-        y0: float,
-        h2v: float,
-        skewv: float,
-        h4v: float,
+        xy: None = None,
+        angle: float = 0,
+        sigma: float = 1,
+        norm: float = 1,
+        offset: float = 0,
+        x0: float = 0,
+        y0: float = 0,
+        h2v: float = 0,
+        skewv: float = 0,
+        h4v: float = 0,
     ) -> np.ndarray:
         """
         The fit function parsed into ``lmfit.Model``. All parameters are varied by LMfit-py.
@@ -189,9 +206,9 @@ class Box:
 
         try:
             result = self._func_model.fit(
-                ravel_data, self._func_params, xy=np.arange(ravel_data.size)
+                ravel_data, self._func_params, xy=None
             )  # xy is just a place holder
-        except:
+        except ValueError:
             return -1
 
         for key in result.params:
@@ -208,6 +225,7 @@ class Box:
             self.h2v,
             self.skewv,
             self.h4v,
+            *_,
         ) = self.params
         self.norm_err = self.param_errs[2]
 
@@ -221,11 +239,11 @@ class Box:
         self.model = model.reshape(self.data.shape)
 
         if self.width > self.height:
-            slice = self.model[self.height]
+            data_slice = self.model[self.height]
         else:
-            slice = self.model[:, self.width]
+            data_slice = self.model[:, self.width]
 
-        res = calc_fwhm_pos(array=slice)
+        res = calc_fwhm_pos(array=data_slice)
         if res == -1:
             self.peak_pos = None
         else:
@@ -248,20 +266,20 @@ class BoxList:
         """
         time_stamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
-        if filename == None:
+        if filename is None:
             filename = f"streampy_{time_stamp}.boxlist"
         else:
             filename = str(filename) + ".boxlist"
 
         self.filename = filename
         try:
-            file = open(filename, "x")
-        except:
-            file = open(filename, "a")
+            file = open(filename, "x", encoding="utf-8")
+        except FileExistsError:
+            file = open(filename, "a", encoding="utf-8")
             file.truncate(0)
 
         file.write(
-            "#id xpos ypos width height angle sigma norm offset x0 y0 h2 h3 h4\n"
+            "#id xpos ypos width height angle sigma norm offset x0 y0 h2 skew h4\n"
         )
         file.close()
 
@@ -281,6 +299,6 @@ class BoxList:
             line = f"# {comment}"
         else:
             line = " ".join(np.array(data).astype(str))
-        file = open(self.filename, "a")
-        file.write(line + "\n")
-        file.close()
+        with open(self.filename, "a", encoding="utf-8") as file:
+            file.write(line + "\n")
+            file.close()
