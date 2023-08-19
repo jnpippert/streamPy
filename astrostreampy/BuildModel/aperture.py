@@ -50,7 +50,7 @@ def std_mask_from_paramtab(
 
     filter_band = header["FILTER"]  # Filter band the image was taken in.
     pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
-    psf = header["PSF"]  # PSF has to be the mean FWHM in arcseconds of all image PSF's.
+    psf = header["PSF"]  # Mean FWHM in arcseconds of all image PSF's.
     seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
 
     print(f"using psf fhwm: {psf} [arcsec]")
