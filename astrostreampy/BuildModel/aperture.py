@@ -29,8 +29,7 @@ def std_mask_from_paramtab(
         Default is 3.
 
     smoothing : int, optional
-        Smoothing factor of the standard deviations. Default 25 means that 25 values before and after
-        the current slice are meaned.
+        Smoothing factor of the standard deviations. Default is 25.
 
     Raises
     ------
