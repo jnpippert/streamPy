@@ -1,6 +1,5 @@
 import numpy as np
 from astropy.convolution import Gaussian1DKernel, convolve
-from astropy.io import fits
 from scipy.stats import norm as scn
 
 from .BuildModel.constants import c2_1, c2_2, c4_1, c4_2, c4_3

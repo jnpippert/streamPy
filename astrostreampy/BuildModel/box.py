@@ -72,7 +72,9 @@ class Box:
             init = [0, 1, 1, 0, 0, 0, 0, 0, 0]
 
         self._psf = Gaussian1DKernel(stddev=seeing)
-        data = original_data.copy()[y - height : y + height, x - width : x + width]
+        data = original_data.copy()[
+            y - height : y + height + 1, x - width : x + width + 1
+        ]
         data[data == 0] = np.nan
         self.data = data
         self._y_grid, self._x_grid = create_grid_arrays(width, height)
@@ -189,10 +191,7 @@ class Box:
             * np.exp(-0.5 * vals**2)
             * (1 + h2_comp + h4_comp + scn.cdf(skewv * vals))
         ) + offset
-        if self._nan_policy:
-            return convolve(
-                model, kernel=self._psf, boundary="extend", nan_treatment="fill"
-            )
+
         return convolve(
             model, kernel=self._psf, boundary="extend", nan_treatment="fill"
         )
