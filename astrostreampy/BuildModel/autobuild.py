@@ -95,9 +95,11 @@ class Model:
         output: str = "model",
     ):
         """
-        Initializes the object and creates class attributes. ``_ctrlc``, ``_header``, ``_filter``, ``_seeing``,
-        ``_vary_box_dim``, ``_fix_bg``, ``_dimx``, ``_dimy``, ``_h2``, ``_skew``, ``_h4``, ``_tmp_data``
-        and ``_sn_threshold`` are private attributes and should not be used outside this class.
+        Initializes the object and creates class attributes. ``_ctrlc``,
+        ``_header``, ``_filter``, ``_seeing``, ``_vary_box_dim``,
+        ``_fix_bg``, ``_dimx``, ``_dimy``, ``_h2``, ``_skew``, ``_h4``,
+        ``_tmp_data`` and ``_sn_threshold`` are private attributes
+        and should not be used outside this class.
 
         Parameters
         ----------
@@ -142,7 +144,8 @@ class Model:
             Sets the signal to noise threshold. Default is 5.0.
 
         fix_bg : float, optional
-            Sets the offset/background to a fixed value and turns off offset fitting. Default is ``None``.
+            Sets the offset/background to a fixed value
+            and turns off offset fitting. Default is ``None``.
 
         vary_box_dim : bool
             Enables dynamic box dimensions. Default is ``False``.
@@ -159,23 +162,10 @@ class Model:
         self.masked_original_data = masked_data
         self.sourcemask = sourcemask
 
-        try:
-            self._filter = header["FILTER"]  # Filter band the image was taken in.
-        except:
-            raise ValueError("No header keyword 'FILTER' found.")
-
-        try:
-            pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
-        except:
-            raise ValueError("No header keyword 'PXSCALE' found.")
-
-        try:
-            psf = header[
-                "PSF"
-            ]  # PSF has to be the mean FWHM in arcseconds of all image PSF's.
-            self._seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
-        except:
-            raise ValueError("No header keyword 'PSF' found.")
+        self._filter = header["FILTER"]  # Filter band the image was taken in.
+        pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
+        psf = header["PSF"]  # Mean FWHM in arcseconds of all image PSF's.
+        self._seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
 
         print(f"using psf fhwm: {psf} [arcsec]")
         print(f"using pxscale: {pxscale} [arcsec / pixel]")
@@ -183,12 +173,19 @@ class Model:
         self._header = header
         self._vary_box_dim = vary_box_dim
         self._fix_bg = fix_bg
-
+        self._norm_tracker = None
+        self._tmp_sigma = None
+        self._tmp_peak_pos = None
         # arrays
         self._dimy, self._dimx = original_data.shape
         self.data = np.zeros((self._dimy, self._dimx)) * np.nan
         self._tmp_data = np.zeros((self._dimy, self._dimx)) * np.nan
-
+        self.init_direction = None
+        self.post_direction = None
+        self._tmp_norm_err = None
+        self._tmp_norm = None
+        self.box_prop_data = None
+        self.param_data = None
         # initial parameters
         self.init_x = init_x
         self.init_y = init_y
@@ -218,7 +215,7 @@ class Model:
                 f"invalid inital box dimensions (expected values > 0, got {init_width}x{init_height})"
             )
 
-    def _keyboard_int(self, signum, frame):
+    def _keyboard_int(self, *args):
         """
         Handles keyboard interrupts. This is a private method and should not be used outside this class.
         """
@@ -236,7 +233,7 @@ class Model:
         int
             -1 if any condition is met, otherwise 0.
         """
-        if self._tmp_peak_pos == None:
+        if self._tmp_peak_pos is None:
             print("no peak for a gaussian fit found")
             return -1
 
@@ -391,7 +388,6 @@ class Model:
             skew=self._skew,
             h4=self._h4,
             fix_bg=self._fix_bg,
-            nowst=self.nowst,
         )
 
         init_box.fit_model()
@@ -475,10 +471,7 @@ class Model:
 
                 if self._vary_box_dim:
                     w, h = util.calculate_new_box_dimensions(
-                        angle=angle,
-                        init_width=self.init_w,
-                        init_height=self.init_h,
-                        sigma=self._tmp_sigma,
+                        angle=angle, init_width=self.init_w, init_height=self.init_h
                     )
 
                 tmp_box = Box(
@@ -493,7 +486,6 @@ class Model:
                     skew=self._skew,
                     h4=self._h4,
                     fix_bg=self._fix_bg,
-                    nowst=self.nowst,
                 )
 
                 if tmp_box.fit_model() == -1:
@@ -558,7 +550,7 @@ class Model:
         array = self.masked_original_data.copy()
         array = np.nan_to_num(array, nan=0)
         wcs = WCS(self._header)
-        fig, (ax1, ax2, ax3) = plt.subplots(
+        _, (ax1, ax2, ax3) = plt.subplots(
             1,
             3,
             sharex=True,
