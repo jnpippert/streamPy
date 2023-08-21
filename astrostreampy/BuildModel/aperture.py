@@ -1,16 +1,13 @@
-from math import ceil
-
 import numpy as np
 from astropy.io import fits
 
-from .. import utilities
-from .utilities import calc_fwhm_pos
+from .utilities import get_distances
 
 
 def fwhm_mask_from_paramtab(
     parameter_file: str,
     multifits_file: str,
-    k: int = 3,
+    k: int = 1,
     smoothing: int = 10,
     verbose: int = 0,
 ) -> np.ndarray:
@@ -43,257 +40,50 @@ def fwhm_mask_from_paramtab(
     mask : `np.ndarray`
     """
 
-    d: dict = {}
-    left_dist: list = []
-    right_dist: list = []
-
     if verbose == 1:
         print(f"creating FHWM mask from parameter table '{parameter_file}' ...")
 
     table = fits.getdata(parameter_file, ext=1)
-    data, header = fits.getdata(multifits_file, ext=0, header=True)
-    mask = np.zeros(data.shape)
 
-    pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
-    psf = header["PSF"]  # Mean FWHM in arcseconds of all image PSF's.
-    seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
-    print(f"using psf fhwm: {psf} [arcsec]")
-    print(f"using pxscale: {pxscale} [arcsec / pixel]")
-    print(f"using seeing: {seeing} [pixel]")
+    model = fits.getdata(multifits_file, ext=4)
+    mask = np.zeros(model.shape)
 
-    for orientation in ["horizontal", "vertical"]:
-        tmp_mask = np.zeros(mask.shape)
-        for i, row in enumerate(table):
-            (
-                x,
-                y,
-                w,
-                h,
-                angle,
-                _,
-                sigma,
-                _,
-                norm,
-                _,
-                offset,
-                _,
-                x0,
-                _,
-                y0,
-                _,
-                h2,
-                _,
-                skew,
-                _,
-                h4,
-                _,
-            ) = row
-            model = utilities.fit_func_2D(
-                None,
-                angle,
-                sigma,
-                norm,
-                offset,
-                x0,
-                y0,
-                h2,
-                skew,
-                h4,
-                w,
-                h,
-                seeing=seeing,
-            )
-            model = model.reshape((2 * h + 1, 2 * w + 1))
+    res = get_distances(parameter_file, multifits_file)
 
-            if orientation == "vertical":
-                if w <= h:
-                    model_slice = model[:, w]
-                else:
-                    continue
+    for i, row in enumerate(table):
+        (x, y, w, h, *_) = row
 
-            if orientation == "horizontal":
-                if w > h:
-                    model_slice = model[h]
-                else:
-                    continue
+        if w > h:
+            model_slice = model.copy()[y, x - w : x + w + 1]
+        else:
+            model_slice = model.copy()[y - h : y + h + 1, x]
 
-            left_pos, left_id, right_pos, right_id, _ = calc_fwhm_pos(array=model_slice)
-            left_dist.append((left_pos - left_id))
-            right_dist.append((right_id - right_pos))
-            d[i] = [x, y, left_pos, right_pos, w, h]
+        center_ids, left_dists, right_dists = res
 
-        for i, (_, val) in enumerate(d.items()):
-            x, y, left_pos, right_pos, w, h = val[:6]
+        if smoothing == 0:
+            left_dist = left_dists[i]
+            right_dist = right_dists[i]
+        else:
             if i < smoothing:
-                left_distance = np.mean(left_dist[: i + smoothing])
-                right_distance = np.mean(right_dist[: i + smoothing])
+                left_dist = np.mean(left_dists[: i + smoothing + 1])
+                right_dist = np.mean(right_dists[: i + smoothing + 1])
             else:
-                left_distance = np.mean(left_dist[i - smoothing : i + smoothing])
-                right_distance = np.mean(right_dist[i - smoothing : i + smoothing])
+                left_dist = np.mean(left_dists[i - smoothing : i + smoothing + 1])
+                right_dist = np.mean(right_dists[i - smoothing : i + smoothing + 1])
 
-            if w > h:
-                mask_slice = np.ones((2 * w + 1))
-            else:
-                mask_slice = np.ones((2 * h + 1))
+        model_x = np.arange(0, len(model_slice), 1)
+        left = np.argmin(np.abs(model_x - (center_ids[i] - k * (left_dist))))
+        right = np.argmin(np.abs(model_x - (center_ids[i] + k * (right_dist))))
 
-            mask_slice[: int(left_pos - k * left_distance)] = 0
-            mask_slice[int(right_pos + k * right_distance + 1) :] = 0
-            mask_slice[
-                int(left_pos - k * left_distance) : int(
-                    right_pos + k * right_distance + 1
-                )
-            ] = 1
+        model_slice[:left] = 0
+        model_slice[right + 1 :] = 0
+        model_slice[left : right + 1] = 1
 
-            if w > h:
-                tmp_mask[y, x - w : x + w + 1] += mask_slice
-            else:
-                tmp_mask[y - h : y + h + 1, x] += mask_slice
+        if w > h:
+            mask[y, x - w : x + w + 1] += model_slice
+        else:
+            mask[y - h : y + h + 1, x] += model_slice
 
-        mask = np.max([mask, tmp_mask], axis=0)
-
-    mask[mask > 1] = 1
-    mask[mask != 1] = 0
-    return mask
-
-
-def std_mask_from_paramtab(
-    parameter_file: str,
-    multifits_file: str,
-    k: int = 3,
-    smoothing: int = 10,
-    verbose: int = 0,
-) -> np.ndarray:
-    """
-    Creates an aperture mask from the parameter FITS table.
-
-    Parameters
-    ----------
-    parameter_file : str or path-like
-        Name of the parameter FITS table.
-
-    multifits_file : str or path-like
-        Name of the mulit FITS file.
-
-    k : int, optional
-        Kappa value for mask creation. How much is set to zero k * sigma from the center.
-        Default is 3.
-
-    smoothing : int, optional
-        Smoothing factor of the standard deviations. Default is 25.
-
-    Raises
-    ------
-    KeyErrors if some of the keys are not found in the FITS header extension.
-
-    Returns
-    -------
-    mask : np.ndarray
-        Data array of the aperture mask.
-
-    """
-
-    if verbose == 1:
-        print(f"creating sigma mask from parameter table '{parameter_file}' ...")
-
-    table = fits.getdata(parameter_file, ext=1)
-    data, header = fits.getdata(multifits_file, ext=0, header=True)
-    mask = np.zeros(data.shape)
-
-    filter_band = header["FILTER"]  # Filter band the image was taken in.
-    pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
-    psf = header["PSF"]  # Mean FWHM in arcseconds of all image PSF's.
-    seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
-
-    print(f"using psf fhwm: {psf} [arcsec]")
-    print(f"using pxscale: {pxscale} [arcsec / pixel]")
-    print(f"using seeing: {seeing} [pixel]")
-
-    sigmas = table[f"sigma_{filter_band}"]
-    for orientation in ["horizontal", "vertical"]:
-        tmp_mask = np.zeros(mask.shape)
-        for i, row in enumerate(table):
-            (
-                x,
-                y,
-                w,
-                h,
-                angle,
-                _,
-                sigma,
-                _,
-                norm,
-                _,
-                offset,
-                _,
-                x0,
-                _,
-                y0,
-                _,
-                h2,
-                _,
-                skew,
-                _,
-                h4,
-                _,
-            ) = row
-
-            model = utilities.fit_func_2D(
-                None,
-                angle,
-                sigma,
-                norm,
-                offset,
-                x0,
-                y0,
-                h2,
-                skew,
-                h4,
-                w,
-                h,
-                seeing=seeing,
-            )
-            clean_model = utilities.fit_func_2D(
-                None, angle, sigma, norm, offset, x0, y0, 0, 0, 0, w, h, seeing=seeing
-            )
-
-            model = model.reshape((2 * h + 1, 2 * w + 1))
-            clean_model = clean_model.reshape((2 * h + 1, 2 * w + 1))
-
-            if orientation == "vertical":
-                if w <= h:
-                    model_slice = model[:, w]
-                    clean_model_slice = clean_model[:, w]
-                else:
-                    continue
-
-            if orientation == "horizontal":
-                if w > h:
-                    model_slice = model[h]
-                    clean_model_slice = clean_model[h]
-                else:
-                    continue
-
-            center_id = np.argmax(clean_model_slice)
-
-            if i < smoothing:
-                sigma = np.mean(sigmas[: i + smoothing + 1])
-            else:
-                sigma = np.mean(sigmas[i - smoothing : i + smoothing + 1])
-
-            right = ceil(center_id - k * sigma)
-            left = int(center_id + k * sigma)
-
-            model_slice[:right] = 0
-            model_slice[left + 1 :] = 0
-            model_slice[right : left + 1] = 1
-
-            if w > h:
-                tmp_mask[y, x - w : x + w + 1] += model_slice
-            else:
-                tmp_mask[y - h : y + h + 1, x] += model_slice
-
-        mask = np.max([mask, tmp_mask], axis=0)
-
-    mask[mask > 1] = 1
+    mask[mask > 1] = 0
     mask[mask != 1] = 0
     return mask

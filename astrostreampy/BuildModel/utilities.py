@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from astropy.io import fits
 from scipy.signal import find_peaks
 
 
@@ -314,3 +315,56 @@ def correct_box_center_from_peak(
     if w > h:
         return x + peak_pos, y
     return x, y + peak_pos
+
+
+def get_distances(parameter_file, multifits_file):
+    """
+    Calculates the distance from the peak to the point where the half maximum
+    is reached. It does this independently for the left and right side.
+
+    Parameters
+    ----------
+    param_file : str
+        A ``_paramtab.fits`` file created by the ``streampy.BuildModel.autobuild.build`` method.
+
+    multifits_file : str
+        A ``_multifits.fits`` file created by the ``streampy.BuildModel.autobuild.build`` method.
+
+    Returns
+    -------
+    result : list
+    """
+    left_dists: list = []
+    right_dists: list = []
+    center_ids: list = []
+    table = fits.getdata(parameter_file, ext=1)
+    model = fits.getdata(multifits_file, ext=4)
+
+    for row in table:
+        (
+            x,
+            y,
+            w,
+            h,
+        ) = np.array(row)[
+            np.array([0, 1, 2, 3])
+        ].astype(int)
+
+        if w > h:
+            model_slice = model.copy()[y, x - w : x + w + 1]
+        else:
+            model_slice = model.copy()[y - h : y + h + 1, x]
+
+        center_id = np.argmax(model_slice)
+        model_x = np.arange(0, len(model_slice), 1)
+        left_ids = model_x < center_id
+        right_ids = model_x > center_id
+
+        half_max = np.max(model_slice) / 2
+        left = np.argmin(np.abs(model_slice[left_ids] - half_max))
+        right = np.argmin(np.abs(model_slice[right_ids] - half_max)) + center_id + 1
+
+        left_dists.append(center_id - left)
+        right_dists.append(right - center_id)
+        center_ids.append(center_id)
+    return center_ids, left_dists, right_dists
