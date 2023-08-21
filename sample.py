@@ -1,10 +1,10 @@
 import argparse
 import sys
 
-from streampy import argutils
-from streampy.BuildModel.autobuild import Model
-from streampy.Image.point import Point
-from streampy.Image.stream import Stream
+from astrostreampy import argutils
+from astrostreampy.BuildModel.autobuild import Model
+from astrostreampy.Image.point import Point
+from astrostreampy.Image.stream import Stream
 
 parser = argparse.ArgumentParser(
     description="wrapper for the streampy stellar stream modelling package. J.N. Pippert 2023"
