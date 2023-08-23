@@ -15,7 +15,7 @@ class ParamTracker:
     """
     Creates a parameter object. Checks for repetition of similiar (~1e-5) values for
     the given parameter. ``_value``, ``_rep_count`` and ``_temp`` are private attributes and
-    should not be used outside of this class.
+    should not be used outside of this class!
 
     Attributes
     ----------
@@ -304,7 +304,7 @@ class Model:
 
         # w < h
         if w < h:
-            self._tmp_data[y - h : y + h +1, x] = data[:, w + 1]
+            self._tmp_data[y - h : y + h + 1, x] = data[:, w + 1]
 
         # w > h
         if w > h:
