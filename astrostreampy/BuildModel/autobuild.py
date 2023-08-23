@@ -15,7 +15,7 @@ class ParamTracker:
     """
     Creates a parameter object. Checks for repetition of similiar (~1e-5) values for
     the given parameter. ``_value``, ``_rep_count`` and ``_temp`` are private attributes and
-    should not be used outside of this class!
+    should not be used outside of this class.
 
     Attributes
     ----------
