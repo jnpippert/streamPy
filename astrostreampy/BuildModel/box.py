@@ -156,16 +156,16 @@ class Box:
 
     def _fitfunc(
         self,
-        xy: None = None,
-        angle: float = 0,
-        sigma: float = 1,
-        norm: float = 1,
-        offset: float = 0,
-        x0: float = 0,
-        y0: float = 0,
-        h2v: float = 0,
-        skewv: float = 0,
-        h4v: float = 0,
+        xy: None,
+        angle: float,
+        sigma: float,
+        norm: float,
+        offset: float,
+        x0: float,
+        y0: float,
+        h2v: float,
+        skewv: float,
+        h4v: float,
     ) -> np.ndarray:
         """
         The fit function parsed into ``lmfit.Model``. All parameters are varied by LMfit-py.

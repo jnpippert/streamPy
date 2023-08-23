@@ -304,11 +304,11 @@ class Model:
 
         # w < h
         if w < h:
-            self._tmp_data[y - h : y + h, x] = data[:, w + 1]
+            self._tmp_data[y - h : y + h +1, x] = data[:, w + 1]
 
         # w > h
         if w > h:
-            self._tmp_data[y, x - w : x + w] = data[h + 1]
+            self._tmp_data[y, x - w : x + w + 1] = data[h + 1]
 
         self.data = np.nanmean([self._tmp_data, self.data], axis=0)
         self._tmp_data *= np.nan
