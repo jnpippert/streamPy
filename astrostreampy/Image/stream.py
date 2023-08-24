@@ -61,6 +61,22 @@ class Stream:
         self.mask = np.ones(self.data.shape)
 
     def _masking(self, mask_list: list) -> np.ndarray:
+        """
+        Iterates through a list of filenames, creates a cummulative mask
+        and multiplies this mask onto the image data.
+
+        This is a private method and should not be used outside this class.
+
+        Parameters
+        ----------
+        mask_list : list
+            List of filenames.
+
+        Returns
+        -------
+        super_mask : np.ndarray
+            All masks from the list combined to one.
+        """
         super_mask = np.ones(self.data.shape)
 
         for mask in mask_list:

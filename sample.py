@@ -7,7 +7,7 @@ from astrostreampy.Image.point import Point
 from astrostreampy.Image.stream import Stream
 
 parser = argparse.ArgumentParser(
-    description="wrapper for the streampy stellar stream modelling package. J.N. Pippert 2023"
+    description="Wrapper for the streampy stellar stream modelling package. J.N. Pippert 2023"
 )
 parser.add_argument(
     "infile", nargs="?", type=argparse.FileType("r"), help="filename of the image"
