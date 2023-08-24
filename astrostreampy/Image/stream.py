@@ -12,8 +12,8 @@ class Stream:
     def __init__(
         self,
         filename: str,
-        masks: list = [],
-        interpolation_masks: list = [],
+        masks: list = None,
+        interpolation_masks: list = None,
         angle: float = 0,
     ):
         """
@@ -43,79 +43,45 @@ class Stream:
             interpolating along the stream with respect to the given angle.
         """
 
+        if masks is None:
+            masks = []
+
+        if interpolation_masks is None:
+            interpolation_masks = []
+
         filename = filename.split(".\\")[-1]  # for windows
         self.filename = filename
         self.data, self.header = fits.getdata(filename, header=True)
         self.original_data = self.data.copy()
 
         self._angle = angle
-        self._masks = masks
-        self._interpolation_masks = interpolation_masks
+        self._mask_lists = [interpolation_masks, masks]
 
-    def apply_masks(self):
-        """
-        Applies all masks onto ``data``, either as source masks or to interpolate zero pixels.
-        """
+        self.interpolation_mask = np.ones(self.data.shape)
+        self.mask = np.ones(self.data.shape)
 
-        if len(self._interpolation_masks) != 0:
-            print("mask and interpolate sources ...")
+    def _masking(self, mask_list: list) -> np.ndarray:
+        super_mask = np.ones(self.data.shape)
 
-            if not isinstance(self._interpolation_masks, list):
-                raise TypeError(
-                    f"'interpolation_masks' of non-list type {type(self._interpolation_masks)}"
+        for mask in mask_list:
+            if not isinstance(mask, str):
+                print(f"WARNING: Mask skipped. Mask name of non-str type {type(mask)}.")
+                continue
+
+            mask = mask.removeprefix(".\\")
+
+            try:
+                mask_data = fits.getdata(mask)
+            except FileNotFoundError as exc:
+                raise FileNotFoundError(f"No file named {mask}.") from exc
+
+            if not self.data.shape == mask_data.shape:
+                raise ValueError(
+                    f"Mask of wrong shape (expected {self.data.shape}, got {mask.shape})."
                 )
-
-            self.interpolation_mask = np.ones(self.data.shape)
-
-            for mask in self._interpolation_masks:
-                if isinstance(mask, str):
-                    try:
-                        if mask.startswith(".\\"):  # for windows
-                            mask = mask[2:]
-                        mask = fits.getdata(mask)
-                    except:
-                        print(f"[WARNING] No path or file called {mask} found.")
-                        continue
-
-                if not self.data.shape == mask.shape:
-                    raise ValueError(
-                        f"Mask of wrong shape (expected {self.data.shape}, got {mask.shape})"
-                    )
-
-                self.data = util.multiply_mask(data=self.data, mask=mask)
-                self.interpolation_mask = util.multiply_mask(
-                    data=self.interpolation_mask, mask=mask
-                )
-
-            self.data = util.interpolate_zero_pixels(data=self.data, theta=self._angle)
-
-        if len(self._masks) != 0:
-            print("mask sources ...")
-            if not isinstance(self._masks, list):
-                raise TypeError(f"masks of non-list type {type(self._masks)}")
-
-            self.mask = np.ones(self.data.shape)
-
-            for mask in self._masks:
-                if isinstance(mask, str):
-                    try:
-                        if mask.startswith(".\\"):  # for windows
-                            mask = mask[2:]
-                        mask = fits.getdata(mask)
-                    except:
-                        print(f"[WARNING] No path or file called {mask} found.")
-                        continue
-
-                if not self.data.shape == mask.shape:
-                    raise ValueError(
-                        f"Mask of wrong shape (expected {self.data.shape}, got {mask.shape})"
-                    )
-
-                self.data = util.multiply_mask(data=self.data, mask=mask)
-                self.mask = util.multiply_mask(data=self.mask, mask=mask)
-
-        else:
-            self.mask_from_data()
+            super_mask *= mask_data
+        self.data *= mask_data
+        return super_mask
 
     def mask_from_data(self):
         """
@@ -124,4 +90,28 @@ class Stream:
 
         mask = self.data.copy()
         mask[mask != 0] = 1
-        return mask
+        self.mask = mask
+
+    def apply_masks(self):
+        """
+        Applies all masks onto ``data``, either as source masks or to interpolate zero pixels.
+        """
+
+        for i, item in enumerate(self._mask_lists):
+            if not isinstance(item, list):
+                raise TypeError(f"cannot iterate through non-list type {type(item)}")
+
+            if len(item) > 0:
+                tmp_mask = self._masking(item)
+
+            if i == 0:
+                self.interpolation_mask = tmp_mask
+                self.data = util.interpolate_zero_pixels(
+                    data=self.data, theta=self._angle
+                )
+                continue
+
+            self.mask = tmp_mask
+
+        if np.prod(self.mask) == 1:
+            self.mask_from_data()
