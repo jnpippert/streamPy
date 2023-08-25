@@ -92,7 +92,7 @@ class Model:
         sn_threshold: float = 5.0,
         fix_bg: float = None,
         vary_box_dim: bool = False,
-        output: str = "model",
+        output: str = "streampy",
     ):
         """
         Initializes the object and creates class attributes. ``_ctrlc``,

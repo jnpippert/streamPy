@@ -200,7 +200,6 @@ class Slice(Stretch):
     def _update_slices(self):
         self._slice()
 
-        angle = self._params[self._index][4]
         xarr = np.arange(0, self._data1d.size, 1)
         mv = np.nanmax(self._data1d)
         self._pax.set_ylim(
