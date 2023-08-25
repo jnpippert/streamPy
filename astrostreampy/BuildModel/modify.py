@@ -1,7 +1,3 @@
-import argparse
-import sys
-
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits

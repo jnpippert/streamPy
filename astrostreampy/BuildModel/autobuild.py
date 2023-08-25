@@ -197,6 +197,15 @@ class Model:
         self._skew = skew
         self._h4 = h4
         self._sn_threshold = sn_threshold
+        self._init_params = [self.init_angle, 1, 1, 0, 0, 0, 0, 0, 0]
+
+        # like that, higher order fitting is more robust
+        if h2:
+            self._init_params[6] = 0.1
+        if skew:
+            self._init_params[7] = 0.1
+        if h4:
+            self._init_params[8] = 0.1
 
         # error monitoring
         self.param_errors = []
@@ -383,7 +392,7 @@ class Model:
             width=self.init_w,
             height=self.init_h,
             seeing=self._seeing,
-            init=[self.init_angle, 1, 1, 0, 0, 0, 0, 0, 0],
+            init=self._init_params,
             h2=self._h2,
             skew=self._skew,
             h4=self._h4,
