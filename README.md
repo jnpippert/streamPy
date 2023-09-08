@@ -38,13 +38,17 @@ init_box = Point(stream.data)
 The modeling is setup and started with the ```Model``` class. The example presents its shortest and simplest form.
 ```
 model = Model(stream.original_data, stream.data, stream.header, 
-                  init_box.x, init_box.y, init_box.width, init_box.height, out="")
+                  init_box.x, init_box.y, init_box.width, init_box.height, output="model")
 model.build() # for further access get full model with .data
 model.show() # for quality checks
 ```
-If ```model.show()``` reveals that the algorithm went beyond the stream call the ````Modifier``` class to cut those regions off.
+If ```model.show()``` reveals that the algorithm went beyond the stream call the ````Modifier``` class to cut those regions off. A window opens displaying the image, model and residual. Type in the terminal the lower and upper indices sperated by "," and press *ENTER*. The model and residual changes based on the input. Repeat it as often as desired. When finished leave the line empty and press *ENTER* again. It saves the modified files with prefix "mod_".
 ```
-modify_model = Modifier("image_multifits.fits","image_paramtab.fits")
-modify_model.do()
+Modifier("model_multifits.fits","model_paramtab.fits")
 ```
+If you are interested in photometric measurements use
+``` 
+aperture = fwhm_mask_from_paramtab("mod_model_multifits.fits","mod_model_paramtab.fits"
+```
+to create an aperture mask, which is a ```numpy.ndarray```.
 
