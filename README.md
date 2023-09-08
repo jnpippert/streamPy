@@ -31,15 +31,20 @@ stream = Stream(image,[mask],[intmask])
 stream.apply_masks()
 ```
 Then the initial box position and dimensions can be set with the ```Point``` class. It opens a figure where the point can be set with left mouse click and the box dimensions are chosen with the sliders on the left. 
-When satisfied close the plot by closing the window.
+When satisfied close the plot by closing the window. ```stream.data()``` is the masked image.
 ```
 init_box = Point(stream.data)
 ```
 The modeling is setup and started with the ```Model``` class. The example presents its shortest and simplest form.
 ```
-model = Model(stream.original_data, masked_data, header, 
-                  init_x, init_y, init_width, init_height)
+model = Model(stream.original_data, stream.data, stream.header, 
+                  init_box.x, init_box.y, init_box.width, init_box.height, out="")
 model.build() # for further access get full model with .data
 model.show() # for quality checks
+```
+If ```model.show()``` reveals that the algorithm went beyond the stream call the ````Modifier``` class to cut those regions off.
+```
+modify_model = Modifier("image_multifits.fits","image_paramtab.fits")
+modify_model.do()
 ```
 
