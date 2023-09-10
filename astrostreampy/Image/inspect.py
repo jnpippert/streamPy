@@ -1,3 +1,5 @@
+import sys
+
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
@@ -316,3 +318,106 @@ class Slice(Stretch):
                 binned_y.append(np.nanmean(sort_y[ids]))
 
         return np.array(binned_x), np.array(binned_y)
+
+
+class ImageFeatures:
+    def __init__(self, filename, cell_size=2000):
+        # TODO implement best scaling for feature identification
+        self.filename = filename
+        self.stackdata, self.stackheader = fits.getdata(filename, header=True)
+        self._cell_size = cell_size
+        self._stack_height, self._stack_width = self.stackdata.shape
+        self._lower_offsets = []
+        self._left_offsets = []
+        self._feature = None
+        self._pos = None
+        self._cells = []
+        self._cell_id = 0
+        self._aquire_cells()
+        self.features = []
+        self.positions = []
+
+        fig, ax = plt.subplots()
+        fig.suptitle(f"cell {self._cell_id + 1}")
+        ax.set_title(r"$click$ $to$ $set$ $point$", color="dimgray")
+        ax.axis("off")
+        (point,) = ax.plot([], [], "o", markersize=10, markeredgecolor="red")
+        y, x = self.stackdata.shape
+        y = int(y / 2)
+        x = int(x / 2)
+        vmin, vmax = [-0.1, 4]
+        # vmin,vmax = np.percentile(self.stackdata,(2,98))
+        img = ax.imshow(
+            self._cells[0], vmin=vmin, vmax=vmax, origin="lower", cmap="YlOrBr_r"
+        )
+
+        self._fig = fig
+        self._ax = ax
+        self._point = point
+        self._img = img
+        fig.canvas.mpl_connect("key_press_event", self._key_press)
+        self._cid = point.figure.canvas.mpl_connect(
+            "button_press_event", self._mouse_click
+        )
+        self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
+        plt.show()
+
+    def _key_press(self, event):
+        sys.stdout.flush()
+        if event.key == "e":
+            if isinstance(self._point.get_xdata(), int):
+                self.features.append("feature")
+                self.positions.append((self.x, self.y))
+                self._point.set_data([], [])
+                self._feature = None
+                print("feature added")
+            self._point.figure.canvas.draw()
+            self._fig.suptitle(f"cell {self._cell_id}, feature: {self._feature}")
+        if event.key == "d":
+            self._cell_id += 1
+            if self._cell_id == len(self._cells):
+                self._cell_id = 0
+            self._img.set_data(self._cells[self._cell_id])
+            self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
+
+            if isinstance(self._point.get_xdata(), int):
+                self.features.append("feature")
+                self.positions.append((self.x, self.y))
+                self._point.set_data([], [])
+                self._feature = None
+                print("feature added")
+            self._point.figure.canvas.draw()
+            self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
+
+    def _mouse_click(self, event):
+        if event.inaxes != self._point.axes:
+            return
+
+        self._feature = "feature"
+        x = int(np.round(event.xdata, 0))
+        y = int(np.round(event.ydata, 0))
+        self.x = x + self._left_offsets[self._cell_id]
+        self.y = y + self._lower_offsets[self._cell_id]
+        self._point.set_data(x, y)
+        self._point.figure.canvas.draw()
+        self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
+
+    def _get_cell(self, left_index, right_index, lower_index, upper_index):
+        return self.stackdata[lower_index:upper_index, left_index:right_index]
+
+    def _aquire_cells(self):
+        left_index = 0
+        while left_index < self._stack_width:
+            lower_index = 0
+            right_index = min(left_index + self._cell_size, self._stack_width)
+            while lower_index < self._stack_height:
+                upper_index = min(lower_index + self._cell_size, self._stack_height)
+
+                d = self._get_cell(left_index, right_index, lower_index, upper_index)
+                if np.median(d) != 0:
+                    self._cells.append(np.log10((d) + np.sqrt((d) ** 2 + 1)))
+                    # self._cells.append(d)
+                    self._lower_offsets.append(lower_index)
+                    self._left_offsets.append(left_index)
+                lower_index += self._cell_size
+            left_index += self._cell_size

@@ -17,7 +17,7 @@ class Stream:
         angle: float = 0,
     ):
         """
-        Creates a Stream object containing the image data.
+        Creates an object containing the image and mask data of the stream.
 
         Parameters
         ----------
