@@ -320,7 +320,7 @@ class Slice(Stretch):
         return np.array(binned_x), np.array(binned_y)
 
 
-class ImageFeatures:
+class Inspect:
     def __init__(self, filename, cell_size=2000):
         # TODO implement best scaling for feature identification
         self.filename = filename
