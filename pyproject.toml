@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astrostreampy"
-version = "0.0.5"
+version = "1.0.0"
 authors = [
   { name="Jan-Niklas Pippert", email="pippertjanniklas@gmail.com" },
 ]
@@ -20,3 +20,6 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/jnpippert/streamPy"
 "Bug Tracker" = "https://github.com/jnpippert/streamPy/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["sample_images*"]
