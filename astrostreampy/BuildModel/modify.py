@@ -46,6 +46,7 @@ class Modifier:
         self._res = res
 
         plt.show(block=False)
+        self._do()
 
     def _update(self):
         """
@@ -110,7 +111,7 @@ class Modifier:
         hdul.writeto(f"mod_{self._multifits_file}", overwrite=True)
         hdul.close()
 
-    def do(self):
+    def _do(self):
         # self._modify()
 
         while True:

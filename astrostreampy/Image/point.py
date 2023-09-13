@@ -18,7 +18,6 @@ class Point:
         self,
         data: np.ndarray,
         cmap: str = "YlOrBr",
-        color: str = "red",
         xy: list = [0, 0],
         wh: list = [0, 0],
     ):
@@ -52,6 +51,7 @@ class Point:
         fig, ax = plt.subplots()
         ax.set_title(r"$click$ $to$ $set$ $point$", color="dimgray")
         ax.axis("off")
+        color = "red"
         (point,) = ax.plot([], [], ".", color=color)
         img = ax.imshow(data, vmin=vmin, vmax=vmax, origin="lower", cmap=cmap)
 
