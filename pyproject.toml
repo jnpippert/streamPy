@@ -1,10 +1,24 @@
 [build-system]
-requires = ["setuptools>=61.0","astropy>=5.3.1","scipy>=1.11.1","numpy>=1.25.2","matplotlib>=3.7.2","lmfit>=1.2.2"]
+requires = ["setuptools>=61.0",
+            "astropy>=5.3.1",
+            "scipy>=1.11.1",
+            "numpy>=1.25.2",
+            "matplotlib>=3.7.2",
+            "lmfit>=1.2.2"
+]
 build-backend = "setuptools.build_meta"
+dependencies = [
+    "docutils",
+    "astropy>=5.3.1",
+    "scipy>=1.11.1",
+    "numpy>=1.25.2",
+    "matplotlib>=3.7.2",
+    "lmfit>=1.2.2",
+]
 
 [project]
 name = "astrostreampy"
-version = "1.0.1"
+version = "1.1.0"
 authors = [
   { name="Jan-Niklas Pippert", email="pippertjanniklas@gmail.com" },
 ]
@@ -22,4 +36,4 @@ classifiers = [
 "Bug Tracker" = "https://github.com/jnpippert/streamPy/issues"
 
 [tool.setuptools.packages.find]
-exclude = ["sample_images*"]
+exclude = ["sample_images*","*fits","test.py"]
