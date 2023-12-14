@@ -82,8 +82,8 @@ class Box:
         self.width = width
         self.params = []
         self.param_errs = []
-        self._x = x
-        self._y = y
+        self.x = x
+        self.y = y
 
         # initalize model
         iangle, isigma, inorm, ioffset, ix0, iy0, ih2, iskew, ih4 = init

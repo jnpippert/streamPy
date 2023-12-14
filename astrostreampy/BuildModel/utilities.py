@@ -69,14 +69,13 @@ def calculate_next_boxcenter(
     x_center: int,
     y_center: int,
     direction: str,
-    stepsize: float,
     dictonary: dict,
-) -> tuple:
+) -> tuple[int, int]:
     """
     Calculates the next box center.
     """
     slope = np.tan(np.arctan(np.tan(np.radians(angle)))).astype(np.float32)
-    y_solution = abs(stepsize / np.sqrt(slope**2 + 1))
+    y_solution = abs(1 / np.sqrt(slope**2 + 1))
     x_solution = abs(slope * y_solution)
 
     if int(abs(slope)) == 0:
@@ -279,8 +278,6 @@ def calc_fwhm_pos(array):
     xarr = np.linspace(-size, size, 2 * size + 1)
 
     if len(peaks) == 0:
-        plt.plot(array)
-        plt.show()
         return -1
     left_peak = peaks[0]
     left_id = half_pos(array[:left_peak], val=array[left_peak])[0][0]

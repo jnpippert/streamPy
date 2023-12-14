@@ -1,4 +1,7 @@
 import signal
+import time
+import warnings
+from multiprocessing import Pool
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -6,9 +9,38 @@ from astropy.io import fits
 from astropy.wcs import WCS
 
 from . import utilities as util
-from .box import Box, BoxList
+from .box import Box
 from .constants import direction_dict, sectors, slope_dict
-from .liveplot import LivePlot
+
+warnings.filterwarnings("ignore")
+
+
+class SegmentModel:
+    def __init__(self, shape: tuple) -> None:
+        self.model = np.full(shape=shape, fill_value=np.nan)
+
+    def paste(
+        self,
+        data: np.ndarray,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        offset: float,
+        angle: float,
+    ):
+        tmp_model = np.full(shape=self.model.shape, fill_value=np.nan)
+        data -= offset
+        angle = abs(np.degrees(np.arctan(np.tan(np.radians(angle)))))
+        if 40 <= angle <= 50:
+            tmp_model[y - h : y + h + 1, x] = data[:, w + 1]
+            tmp_model[y, x - w : x + w + 1] = data[h + 1]
+        if angle < 40:
+            tmp_model[y, x - w : x + w + 1] = data[h + 1]
+        if angle > 50:
+            tmp_model[y - h : y + h + 1, x] = data[:, w + 1]
+
+        self.model = np.nanmean([self.model, tmp_model], axis=0)
 
 
 class ParamTracker:
@@ -59,7 +91,8 @@ class ParamTracker:
         bool
             ``False`` if repetion limit reached. Otherwise ``True``.
         """
-        if not np.isclose(self._tmp, self._value, atol=1e-20):
+
+        if not np.isclose(self._tmp, self._value, atol=1e-10):
             self._rep_count = 1
             return True
         self._rep_count += 1
@@ -155,7 +188,7 @@ class Model:
 
         """
         # Ctrl+C interrupt handling
-        signal.signal(signal.SIGINT, self._keyboard_int)
+        # signal.signal(signal.SIGINT, self._keyboard_int)
         self._ctrlc = False
 
         self.original_data = original_data
@@ -173,7 +206,7 @@ class Model:
         self._header = header
         self._vary_box_dim = vary_box_dim
         self._fix_bg = fix_bg
-        self._norm_tracker = None
+        self._norm_tracker = ParamTracker()
         self._tmp_sigma = None
         self._tmp_peak_pos = None
         # arrays
@@ -186,6 +219,10 @@ class Model:
         self._tmp_norm = None
         self.box_prop_data = None
         self.param_data = None
+        self._init_box_params = None
+        self._init_box_param_errs = None
+        self._init_box_model = None
+        self._init_box_props = None
         # initial parameters
         self.init_x = init_x
         self.init_y = init_y
@@ -224,18 +261,19 @@ class Model:
                 f"invalid inital box dimensions (expected values > 0, got {init_width}x{init_height})"
             )
 
-    def _keyboard_int(self, *args):
-        """
-        Handles keyboard interrupts. This is a private method and should not be used outside this class.
-        """
-        print("\n")
-        print("Ctrl+C pressed by user, saving current progress")
-        self._save()
-        self._ctrlc = True
+    # def _keyboard_int(self, *args):
+    #     """
+    #     Handles keyboard interrupts. This is a private method and should not be used outside this class.
+    #     """
+    #     print("\n")
+    #     print("Ctrl+C pressed by user, saving current progress")
+    #     # self._save()
+    #     self._ctrlc = True
 
     def _chek_termination(self):
         """
-        Checks various termination conditions. This is a private method and should not be used outside this class.
+        Checks various termination conditions.
+        This is a private method and should not be used outside this class.
 
         Returns
         -------
@@ -261,74 +299,62 @@ class Model:
             return -1
         return 0
 
-    def _paste_modelbox(
-        self,
-        data: np.ndarray,
-        x: int,
-        y: int,
-        w: int,
-        h: int,
-        angle: float,
-        offset: float,
-    ):
-        """
-        Fills the model data with 1d slices. Depending on the box dimensions and the stream angle, the correct
-        position and fill area on the model data array is determined.
+    def _segment(self, args):
+        angle, x, y, w, h, direction, step_number, guess_parameter = args
+        best_fit_parameter: list = []
+        box_properties: list = []
+        seg_model = SegmentModel(shape=(self._dimy, self._dimx))
+        for _ in range(step_number):
+            x, y = util.calculate_next_boxcenter(
+                angle=angle,
+                x_center=x,
+                y_center=y,
+                direction=direction,
+                dictonary=slope_dict,
+            )
 
-        Parameters
-        ----------
-        data : np.ndarray
-            Model data of a box.
+            tmp_box = Box(
+                self.masked_original_data,
+                x,
+                y,
+                w,
+                h,
+                init=guess_parameter,
+                seeing=self._seeing,
+                h2=self._h2,
+                skew=self._skew,
+                h4=self._h4,
+                fix_bg=self._fix_bg,
+            )
 
-        x : int
-            Central x position of the box/data.
+            if tmp_box.fit_model() == -1:
+                break
 
-        y : int
-            Central y position of the box/data.
+            if tmp_box.make_model() == -1:
+                break
+            best_fit_parameter.append([tmp_box.params, tmp_box.param_errs])
+            box_properties.append([x, y, w, h])
+            self._tmp_norm = tmp_box.norm
+            self._tmp_norm_err = tmp_box.norm_err
 
-        w : int
-            Width of the box/data.
+            seg_model.paste(
+                tmp_box.model.copy(), x, y, w, h, tmp_box.offset, tmp_box.angle
+            )
+            guess_parameter = tmp_box.params
+            possible_directions = util.get_direction_options(
+                tmp_box.angle, sectors, direction_dict
+            )
+            direction = util.get_box_direction(direction, possible_directions)
+            self._tmp_peak_pos = tmp_box.peak_pos
+            if self._chek_termination() == -1:
+                break
 
-        h : int
-            Height of the box/data.
+            x, y = util.correct_box_center_from_peak(
+                x=x, y=y, w=w, h=h, peak_pos=tmp_box.peak_pos
+            )
+        return [best_fit_parameter, seg_model.model, box_properties]
 
-        angle : float
-            Angle of the Gaussian inside the box.
-
-        offset : float
-            Offset/background value of the box.
-
-        """
-        # TODO this whole method needs to be overworked for near 45 degree angles.
-        data -= offset
-        angle = abs(np.degrees(np.arctan(np.tan(np.radians(angle)))))
-
-        # w = h
-        if self._vary_box_dim:
-            if 40 <= angle <= 50:
-                self._tmp_data[y - h : y + h, x - w : x + w] = data
-                self.data = np.nanmean([self._tmp_data, self.data], axis=0)
-                self._tmp_data *= np.nan
-                return
-
-        # w < h
-        if w < h:
-            self._tmp_data[y - h : y + h + 1, x] = data[:, w + 1]
-
-        # w > h
-        if w > h:
-            self._tmp_data[y, x - w : x + w + 1] = data[h + 1]
-
-        self.data = np.nanmean([self._tmp_data, self.data], axis=0)
-        self._tmp_data *= np.nan
-
-    def build(
-        self,
-        stepsize: int = 1,
-        steps: tuple = (9999, 9999),
-        liveplot: bool = False,
-        verbose: int = 1,
-    ):
+    def build(self, steps: tuple[int, int] = (9999, 9999)):
         """
         Does the model building.
 
@@ -359,32 +385,6 @@ class Model:
             Second value is the number of iterations the box gets shifted towards the 'post_direction'.
         """
 
-        x: int = self.init_x
-        y: int = self.init_y
-        w: int = self.init_w
-        h: int = self.init_h
-
-        if isinstance(steps, int):
-            raise TypeError(f"'steps'of non-tuple type {type(steps)}")
-
-        if len(steps) != 2:
-            raise ValueError(
-                f"false number of values to unpack (expected 2 got {len(steps)})"
-            )
-
-        if verbose == 1:
-            util.intro()
-
-        if liveplot:
-            live_plot = LivePlot(
-                real_data=self.masked_original_data,
-                box_width=self.init_w,
-                box_height=self.init_h,
-            )
-
-        self._norm_tracker = ParamTracker()
-
-        # fit the init box
         init_box = Box(
             self.masked_original_data,
             x=self.init_x,
@@ -401,149 +401,81 @@ class Model:
 
         init_box.fit_model()
         init_box.make_model()
-
-        angle = init_box.angle
-        self._tmp_sigma = init_box.sigma
-
-        self._tmp_peak_pos = init_box.peak_pos
-        params = init_box.params
-
-        errs = init_box.param_errs
-
-        self.param_errors.append(errs)
-        self.params.append(params)
-        self.box_properties.append([self.init_x, self.init_y, self.init_w, self.init_h])
-
-        # paste init box
-        self._paste_modelbox(
+        self._init_box_params = init_box.params
+        self._init_box_param_errs = init_box.param_errs
+        self._init_box_props = [self.init_x, self.init_y, self.init_w, self.init_h]
+        self._init_box_model = SegmentModel(shape=(self._dimy, self._dimx))
+        self._init_box_model.paste(
             init_box.model,
-            self.init_x,
-            self.init_y,
-            self.init_w,
-            self.init_h,
-            angle,
+            init_box.x,
+            init_box.y,
+            init_box.width,
+            init_box.height,
             init_box.offset,
+            init_box.angle,
         )
 
-        # get direction options
         dopts = util.get_direction_options(init_box.angle, sectors, direction_dict)
-        self.init_direction = dopts[0]
-        self.post_direction = dopts[1]
-        direction = dopts[0]
 
-        box_id = 1
-        file = BoxList(filename=self.output)
-        file.write_line(data=[box_id, x, y, w, h, *params])
+        x, y = util.correct_box_center_from_peak(
+            x=self.init_x,
+            y=self.init_y,
+            w=self.init_w,
+            h=self.init_h,
+            peak_pos=init_box.peak_pos,
+        )
+        with Pool() as pool:
+            result = pool.map(
+                self._segment,
+                [
+                    (
+                        init_box.angle,
+                        x,
+                        y,
+                        self.init_w,
+                        self.init_h,
+                        dopts[0],
+                        steps[0],
+                        init_box.params.copy(),
+                    ),
+                    (
+                        init_box.angle,
+                        x,
+                        y,
+                        self.init_w,
+                        self.init_h,
+                        dopts[1],
+                        steps[1],
+                        init_box.params.copy(),
+                    ),
+                ],
+            )
+        self._stitch_segment_models(result[0][1], result[1][1])
+        self._stitch_best_fit_parameters(
+            result[0][0], result[1][0], result[0][2], result[1][2]
+        )
+        return
 
-        # model loop, in direction init_direction, starting from init_x and init_y
-        if verbose == 1:
-            print("\n")
-            print("##### FIRST HALF #####")
-            print("\n")
+    def _stitch_segment_models(self, model1: np.ndarray, model2: np.ndarray):
+        self.data = np.nanmean(
+            np.array([model1, model2, self._init_box_model.model]), axis=0
+        )
 
-        for run in range(2):
-            if run == 1:
-                if verbose == 1:
-                    print("\n")
-                    print("##### SECOND HALF #####")
-                    print("\n")
-                # setup other direction
-                angle = init_box.angle
-                params = init_box.params
-                x = self.init_x
-                y = self.init_y
-                w = self.init_w
-                h = self.init_h
-                self.params = self.params[::-1]
-                self.param_errors = self.param_errors[::-1]
-                self.box_properties = self.box_properties[::-1]
-                direction = self.post_direction
-                file.write_line(comment="2nd run")
+    def _stitch_best_fit_parameters(self, params1, params2, props1, props2):
+        params1 = np.flip(np.array(params1), axis=0)
+        params2 = np.array(params2)
+        props1 = np.flip(np.array(props1), axis=0)
+        props2 = np.array(props2)
 
-            for _ in range(steps[run]):
-                if verbose == 1:
-                    print(f"iteration {_+1}", end="\r")
+        self.box_prop_data = np.array([*props1, self._init_box_props, *props2])
+        params = np.array([*params1[:, 0], self._init_box_params, *params2[:, 0]])
+        param_errs = np.array(
+            [*params1[:, 1], self._init_box_param_errs, *params2[:, 1]]
+        )
+        self.param_data = np.array([params, param_errs])
 
-                # x,y = util.correct_boxcenter(x=x,y=y,w=w,h=h,params=params, peak_pos = self._tmp_peak_pos)
-                x, y = util.correct_box_center_from_peak(
-                    x=x, y=y, w=w, h=h, peak_pos=self._tmp_peak_pos
-                )
-
-                x, y = util.calculate_next_boxcenter(
-                    angle=angle,
-                    x_center=x,
-                    y_center=y,
-                    direction=direction,
-                    stepsize=stepsize,
-                    dictonary=slope_dict,
-                )
-
-                if self._vary_box_dim:
-                    w, h = util.calculate_new_box_dimensions(
-                        angle=angle, init_width=self.init_w, init_height=self.init_h
-                    )
-
-                tmp_box = Box(
-                    self.masked_original_data,
-                    x,
-                    y,
-                    w,
-                    h,
-                    init=params,
-                    seeing=self._seeing,
-                    h2=self._h2,
-                    skew=self._skew,
-                    h4=self._h4,
-                    fix_bg=self._fix_bg,
-                )
-
-                if tmp_box.fit_model() == -1:
-                    break
-                if tmp_box.make_model() == -1:
-                    break
-
-                self._tmp_norm_err = tmp_box.norm_err
-                self._tmp_norm = tmp_box.norm
-
-                angle = tmp_box.angle
-                params = tmp_box.params
-
-                self._tmp_sigma = tmp_box.sigma
-
-                self._tmp_peak_pos = tmp_box.peak_pos
-
-                dopts = util.get_direction_options(angle, sectors, direction_dict)
-                direction = util.get_box_direction(direction, dopts)
-
-                if self._chek_termination() == -1:
-                    print("\n")
-                    print(f"----> {run+1}. half terminated after {_} steps!")
-                    print("\n")
-                    break
-
-                self._paste_modelbox(tmp_box.model, x, y, w, h, angle, tmp_box.offset)
-
-                self.param_errors.append(tmp_box.param_errs)
-                self.params.append(params)
-                self.box_properties.append([x, y, w, h])
-
-                file.write_line(data=[(_ + 1) + (run + 1) / 10, x, y, w, h, *params])
-
-                if liveplot:
-                    live_plot.plot(data=self.data, center=[x, y], width=w, height=h)
-                del tmp_box
-
-                if self._ctrlc:
-                    self._ctrlc = False
-                    break
-
-        if liveplot:
-            live_plot.close()
-
-        self.param_data = np.array([self.params, self.param_errors])
-        self.box_prop_data = np.array([self.box_properties])
-        self._save()
         self._create_parameter_table()
+        self._save()
 
     def show(self, output: str = None):
         """
@@ -641,19 +573,19 @@ class Model:
         bp = self.box_prop_data
 
         # x
-        bx = bp[:, :, 0][0]
+        bx = bp[:, 0]
         bxc = fits.Column(name="box_x", format="I", array=bx)
 
         # y
-        by = bp[:, :, 1][0]
+        by = bp[:, 1]
         byc = fits.Column(name="box_y", format="I", array=by)
 
         # width
-        bw = bp[:, :, 2][0]
+        bw = bp[:, 2]
         bwc = fits.Column(name="box_w", format="I", array=bw)
 
         # height
-        bh = bp[:, :, 3][0]
+        bh = bp[:, 3]
         bhc = fits.Column(name="box_h", format="I", array=bh)
 
         # angle

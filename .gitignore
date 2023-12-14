@@ -6,6 +6,9 @@ __pycache__/
 #python files
 test.py
 
+#fits files
+*.fits
+
 # C extensions
 *.so
 

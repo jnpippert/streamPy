@@ -45,40 +45,45 @@ parser.parse_args(args=None if sys.argv[1:] else ["--help"])
 args = parser.parse_args()
 
 
-# handle args
-infile = argutils.handle_infile(arg=args.infile)
-s1, s2 = argutils.handle_steps(arg=args.steps)
-mask_list = argutils.handle_fileargs(arg=args.maskfiles)
-intmask_list = argutils.handle_fileargs(arg=args.intpolmaskfiles)
+def main():
+    # handle args
+    infile = argutils.handle_infile(arg=args.infile)
+    s1, s2 = argutils.handle_steps(arg=args.steps)
+    mask_list = argutils.handle_fileargs(arg=args.maskfiles)
+    intmask_list = argutils.handle_fileargs(arg=args.intpolmaskfiles)
 
-# intialize the data
-stream = Stream(
-    filename=infile,
-    masks=mask_list,
-    interpolation_masks=intmask_list,
-    angle=args.initangle,
-)
-init_point = Point(stream.data)
+    # intialize the data
+    stream = Stream(
+        filename=infile,
+        masks=mask_list,
+        interpolation_masks=intmask_list,
+        angle=args.initangle,
+    )
+    stream.apply_masks()
+    init_point = Point(stream.data)
+
+    stream_model = Model(
+        original_data=stream.original_data,
+        masked_data=stream.data,
+        header=stream.header,
+        sourcemask=stream.mask,
+        init_x=init_point.x,
+        init_y=init_point.y,
+        init_width=init_point.width,
+        init_height=init_point.height,
+        init_angle=args.initangle,
+        h2=args.h2param,
+        skew=args.skewparam,
+        h4=args.h4param,
+        sn_threshold=args.signalnoise,
+        fix_bg=args.fixbackground,
+        vary_box_dim=args.varyhw,
+        output=args.output,
+    )
+
+    stream_model.build(steps=(s1, s2), liveplot=args.liveplot)
+    stream_model.show(output=args.output)
 
 
-stream_model = Model(
-    original_data=stream.original_data,
-    masked_data=stream.data,
-    header=stream.header,
-    sourcemask=stream.mask,
-    init_x=init_point.x,
-    init_y=init_point.y,
-    init_width=init_point.width,
-    init_height=init_point.height,
-    init_angle=args.initangle,
-    h2=args.h2param,
-    skew=args.skewparam,
-    h4=args.h4param,
-    sn_threshold=args.signalnoise,
-    fix_bg=args.fixbackground,
-    vary_box_dim=args.varyhw,
-    output=args.output,
-)
-
-stream_model.build(steps=(s1, s2), liveplot=args.liveplot)
-stream_model.show(output=args.output)
+if __name__ == "__main__":
+    main()
