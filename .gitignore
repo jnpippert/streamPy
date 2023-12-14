@@ -9,6 +9,10 @@ test.py
 #fits files
 *.fits
 
+streampy_multifits.fits
+streampy_paramtab.fits
+
+test.py
 # C extensions
 *.so
 
