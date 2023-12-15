@@ -23,9 +23,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies
-= [
-    "docutils",
+dependencies = [
     "astropy>=5.3.1",
     "scipy>=1.11.1",
     "numpy>=1.25.2",
