@@ -120,14 +120,14 @@ class Stream:
             if len(item) > 0:
                 tmp_mask = self._masking(item)
 
-            if i == 0:
-                self.interpolation_mask = tmp_mask
-                self.data = util.interpolate_zero_pixels(
-                    data=self.data, theta=self._angle
-                )
-                continue
+                if i == 0:
+                    self.interpolation_mask = tmp_mask
+                    self.data = util.interpolate_zero_pixels(
+                        data=self.data, theta=self._angle
+                    )
+                    continue
 
-            self.mask = tmp_mask
+                self.mask = tmp_mask
 
         if np.prod(self.mask) == 1:
             self.mask_from_data()
