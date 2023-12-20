@@ -48,6 +48,7 @@ class Slice(Stretch):
         self._offset = self._params[init_n][10]
         self._index = init_n
         self._x, self._y, self._width, self._height = self._params[init_n][:4]
+        self._lin_scale()
         self._calc_cuts()
         self._stretched_model = self._lin_scale(array=self._model)
 
@@ -168,7 +169,7 @@ class Slice(Stretch):
             "button_press_event", self._mouse_click
         )
         self._pax.legend(ncol=2)
-        plt.savefig("screen_slice_inspection.pdf")
+        # plt.savefig("screen_slice_inspection.pdf")
         plt.show()
 
     def _nearest_index(self):
