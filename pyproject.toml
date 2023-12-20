@@ -11,25 +11,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astrostreampy"
-version = "1.1.0"
+version = "1.2.1"
 authors = [
   { name="Jan-Niklas Pippert", email="pippertjanniklas@gmail.com" },
 ]
 description = "Package to model stellar tidal streams."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.9"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-dependencies = [
-    "astropy>=5.3.1",
-    "scipy>=1.11.1",
-    "numpy>=1.25.2",
-    "matplotlib>=3.7.2",
-    "lmfit>=1.2.2",
-]
+
 
 [project.urls]
 "Homepage" = "https://github.com/jnpippert/streamPy"
