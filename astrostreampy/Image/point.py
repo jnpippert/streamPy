@@ -1,58 +1,56 @@
+import sys
+from dataclasses import dataclass, field
+
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Button, Slider
 
+__all__ = ["Point", "InitBox"]
 
+
+@dataclass(eq=True, unsafe_hash=True)
 class Point:
-    """
-    Class to define the starting point of the stream fitting algorithm. Additionally the initial
-    box dimensions are set with it.
+    x: int = field(default=0, repr=True, compare=True, hash=True)
+    y: int = field(default=0, repr=True, compare=True, hash=True)
+    color: str = field(default="red", repr=False, compare=False, hash=False)
 
-    This class can be used with an already existing plot, created outside of this class.
-    The start point (x,y) can be set with a left mouse click (handled in the ``_mouse_click()`` method.
+    def vector_to(self, point: "Point") -> list[int]:
+        return [point.x - self.x, point.y - self.y]
 
-    """
+    def distance_to(self, point: "Point") -> float:
+        vec = self.vector_to(point)
+        return np.sqrt(vec[0] ** 2 + vec[1] ** 2)
 
-    def __init__(
-        self,
-        data: np.ndarray,
-        cmap: str = "YlOrBr",
-        xy: list = [0, 0],
-        wh: list = [0, 0],
-    ):
-        """
-        Initializes the figure.
+    def isclose(self, point: "Point", tol: int = 3) -> bool:
+        IS_CLOSE_THRESHOLD = 3
+        theta = min(IS_CLOSE_THRESHOLD, tol)
+        if abs(self.x - point.x) <= theta and abs(self.y - point.y) <= theta:
+            return True
+        return False
 
-        Parameters
-        ----------
-        data : np.ndarray
-            Image array.
 
-        cmap : str, optional
-            (``matplotlib``) Colormap of the image. Default is "YlOrBr".
+class InitBox(Point):
+    def __init__(self, data: np.ndarray, cmap: str = "YlOrBr", color: str = "red"):
+        super().__init__()
 
-        color : color, optional
-            (``matplotlib``) Color of the point. Default is "red".
-
-        xy : list, optional
-            List of the x and y coordinates of the point. Default is [0,0].
-
-        wh : list, optional
-            List of the width and height of the initial box. Default is [0,0].
-        """
+        # set nans to zero
         data = np.nan_to_num(data, nan=0)
 
         # calculate cut levels
-        vmin = np.percentile(data, 5)
-        vmax = np.percentile(data, 95)
+        vmin, vmax = np.percentile(data, (5, 95))
 
         # initialize plot
         fig, ax = plt.subplots()
-        ax.set_title(r"$click$ $to$ $set$ $point$", color="dimgray")
+
+        ax.set_title(
+            r"$to$ $switch$ $modes$ $press:$ $'a'$, $'w'$ and $'d'$", color="dimgray"
+        )
         ax.axis("off")
         color = "red"
         (point,) = ax.plot([], [], ".", color=color)
+        (p1,) = ax.plot([], [], ".", color=color)
+        (p2,) = ax.plot([], [], ".", color=color)
         img = ax.imshow(data, vmin=vmin, vmax=vmax, origin="lower", cmap=cmap)
 
         # initialize vmin slider
@@ -79,14 +77,11 @@ class Point:
         )
         vmax_slider.on_changed(self._update)
 
-        # initialize rectangle
-        width, height = wh
-
         rect = ax.add_patch(
             Rectangle(
                 [0, 0],
-                width=width,
-                height=height,
+                width=0,
+                height=0,
                 fill=False,
                 color=color,
                 linewidth=0.8,
@@ -100,7 +95,7 @@ class Point:
             label="width",
             valmin=0,
             valmax=data.shape[1] / 3,
-            valinit=width,
+            valinit=0,
             valstep=1,
             orientation="vertical",
         )
@@ -113,7 +108,7 @@ class Point:
             label="height",
             valmin=0,
             valmax=data.shape[0] / 3,
-            valinit=height,
+            valinit=0,
             valstep=1,
             orientation="vertical",
         )
@@ -140,10 +135,8 @@ class Point:
         rect_button.on_clicked(self._reset_rect)
 
         # set attributes
-        self.x, self.y = xy
-
-        self.width = width
-        self.height = height
+        self.width = 0
+        self.height = 0
         self._rect = rect
         self._vmin_slider = vmin_slider
         self._vmax_slider = vmax_slider
@@ -152,30 +145,71 @@ class Point:
         self._fig = fig
         self._img = img
         self._point = point
+        self._p1 = p1
+        self._p2 = p2
+        self.tail = Point()
+        self.head = Point()
+        self._pointmode = True
+        self._p1mode = False
+        self._p2mode = False
         self._cid = point.figure.canvas.mpl_connect(
             "button_press_event", self._mouse_click
         )
+        self._fig.suptitle(r"set init point and box", color="k")
+        fig.canvas.mpl_connect("key_press_event", self._key_press)
 
         plt.show()
+
+    def _key_press(self, event):
+        sys.stdout.flush()
+        if event.key == "a":
+            self._p1mode = True
+            self._p2mode = False
+            self._pointmode = False
+            self._fig.suptitle(r"set first end point", color="k")
+            self._fig.figure.canvas.draw()
+        if event.key == "d":
+            self._p1mode = False
+            self._p2mode = True
+            self._pointmode = False
+            self._fig.suptitle(r"set second end point", color="k")
+            self._fig.figure.canvas.draw()
+        if event.key == "w":
+            self._p1mode = False
+            self._p2mode = False
+            self._pointmode = True
+            self._fig.suptitle(r"set init point and box", color="k")
+            self._fig.figure.canvas.draw()
 
     def _mouse_click(self, event):
         """
         Handles mouse clicking events in the matplotlib API.
         This is a private method and should not be used outside this class.
         """
-
         if event.inaxes != self._point.axes:
             return
-
         x = int(np.round(event.xdata, 0))
         y = int(np.round(event.ydata, 0))
-        self.xy = (x, y)
-        self.x = x
-        self.y = y
-        self._fig.suptitle(f"{x = }, {y = }")
-        self._point.set_data(x, y)
-        self._rect.set_xy([x - self.width, y - self.height])
-        self._point.figure.canvas.draw()
+        if self._p1mode:
+            self.tail.x = x
+            self.tail.y = y
+            self._fig.suptitle(f"{x = }, {y = }")
+            self._p1.set_data(x, y)
+
+        if self._p2mode:
+            self.head.x = x
+            self.head.y = y
+            self._fig.suptitle(f"{x = }, {y = }")
+            self._p2.set_data(x, y)
+
+        if self._pointmode:
+            self.x = x
+            self.y = y
+            self._fig.suptitle(f"{x = }, {y = }")
+            self._point.set_data(x, y)
+            self._rect.set_xy([x - self.width, y - self.height])
+
+        self._fig.figure.canvas.draw()
 
     def _update(self, val):
         """
