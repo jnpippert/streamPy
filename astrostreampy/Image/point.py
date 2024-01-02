@@ -22,10 +22,8 @@ class Point:
         vec = self.vector_to(point)
         return np.sqrt(vec[0] ** 2 + vec[1] ** 2)
 
-    def isclose(self, point: "Point", tol: int = 3) -> bool:
-        IS_CLOSE_THRESHOLD = 3
-        theta = min(IS_CLOSE_THRESHOLD, tol)
-        if abs(self.x - point.x) <= theta and abs(self.y - point.y) <= theta:
+    def isclose(self, point: "Point", tol: int = 10) -> bool:
+        if abs(self.x - point.x) <= tol and abs(self.y - point.y) <= tol:
             return True
         return False
 

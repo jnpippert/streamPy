@@ -5,8 +5,9 @@ from astropy.table import Table
 
 
 class Modifier:
-    def __init__(self, multifits_file: str, param_file: str, lower: int, upper: int):
-        plt.ion()
+    def __init__(
+        self, multifits_file: str, param_file: str, lower: int = None, upper: int = None
+    ):
         self._param_file = param_file.removeprefix(".\\")
         self._multifits_file = multifits_file.removeprefix(".\\")
         self._model = fits.getdata(multifits_file, ext=4, memmap=False)
@@ -15,38 +16,44 @@ class Modifier:
         self._table_data, self._table_header = fits.getdata(
             param_file, ext=1, header=True, memmap=False
         )
-        self._lower = lower
-        self._upper = upper
+        if isinstance(lower, int) and isinstance(upper, int):
+            self._lower = lower
+            self._upper = upper
+            self._save()
+        else:
+            self._lower = lower
+            self._upper = upper
+            plt.ion()
+            self._data[np.isnan(self._data)] = 0
+            vmin = np.percentile(self._data, 2)
+            vmax = np.percentile(self._data, 98)
 
-        # plt.ion()
-        self._data[np.isnan(self._data)] = 0
-        vmin = np.percentile(self._data, 2)
-        vmax = np.percentile(self._data, 98)
+            fig, ax = plt.subplots(1, 3, sharex=True, sharey=True)
+            for a in ax:
+                a.axis("off")
 
-        fig, ax = plt.subplots(1, 3, sharex=True, sharey=True)
-        for a in ax:
-            a.axis("off")
+            ax[0].imshow(
+                self._data, origin="lower", vmin=vmin, vmax=vmax, cmap="YlOrBr"
+            )
+            mod = ax[1].imshow(
+                self._model, origin="lower", vmin=vmin, vmax=vmax, cmap="YlOrBr"
+            )
+            res = ax[2].imshow(
+                self._data - self._model,
+                origin="lower",
+                vmin=vmin,
+                vmax=vmax,
+                cmap="YlOrBr",
+            )
 
-        ax[0].imshow(self._data, origin="lower", vmin=vmin, vmax=vmax, cmap="YlOrBr")
-        mod = ax[1].imshow(
-            self._model, origin="lower", vmin=vmin, vmax=vmax, cmap="YlOrBr"
-        )
-        res = ax[2].imshow(
-            self._data - self._model,
-            origin="lower",
-            vmin=vmin,
-            vmax=vmax,
-            cmap="YlOrBr",
-        )
+            self.fig = fig
+            self.ax = ax
 
-        self.fig = fig
-        self.ax = ax
+            self._mod = mod
+            self._res = res
 
-        self._mod = mod
-        self._res = res
-
-        plt.show(block=False)
-        self._do()
+            plt.show(block=False)
+            self._do()
 
     def _update(self):
         """

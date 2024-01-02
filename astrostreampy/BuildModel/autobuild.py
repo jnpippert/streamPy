@@ -8,6 +8,7 @@ import numpy as np
 from astropy.io import fits
 from astropy.wcs import WCS
 
+from ..Image.point import Point
 from . import utilities as util
 from .box import Box
 from .constants import direction_dict, sectors, slope_dict
@@ -125,6 +126,9 @@ class Model:
         sn_threshold: float = 5.0,
         fix_bg: float = None,
         vary_box_dim: bool = False,
+        head: Point = None,
+        tail: Point = None,
+        tol: int = 10,
         output: str = "streampy",
     ):
         """
@@ -206,7 +210,7 @@ class Model:
         self._header = header
         self._vary_box_dim = vary_box_dim
         self._fix_bg = fix_bg
-        self._norm_tracker = ParamTracker()
+
         self._tmp_sigma = None
         self._tmp_peak_pos = None
         # arrays
@@ -261,6 +265,13 @@ class Model:
                 f"invalid inital box dimensions (expected values > 0, got {init_width}x{init_height})"
             )
 
+        # termination selfs
+        self._tol = tol
+        self._head = head
+        self._head_dist = self._tol
+        self._tail = tail
+        self._tail_dist = self._tol
+
     # def _keyboard_int(self, *args):
     #     """
     #     Handles keyboard interrupts. This is a private method and should not be used outside this class.
@@ -270,7 +281,14 @@ class Model:
     #     # self._save()
     #     self._ctrlc = True
 
-    def _chek_termination(self):
+    def _chek_termination(
+        self,
+        peak_pos: float,
+        norm: float,
+        norm_err: float,
+        norm_tracker: ParamTracker,
+        box_center: Point,
+    ):
         """
         Checks various termination conditions.
         This is a private method and should not be used outside this class.
@@ -280,22 +298,38 @@ class Model:
         int
             -1 if any condition is met, otherwise 0.
         """
-        if self._tmp_peak_pos is None:
-            print("no peak for a gaussian fit found")
+        if self._head is not None:
+            if box_center.isclose(self._head, tol=self._tol):
+                self._head_dist -= 1
+
+        if self._head_dist == 0:
+            print("head reached. segment terminated.")
             return -1
 
-        if isinstance(self._tmp_norm_err, float):
+        if self._tail is not None:
+            if box_center.isclose(self._tail, tol=self._tol):
+                self._tail_dist -= 1
+
+        if self._tail_dist == 0:
+            print("tail reached. segment terminated.")
+            return -1
+
+        if peak_pos is None:
+            print("no peak for a gaussian fit found. segment terminated.")
+            return -1
+
+        if isinstance(norm_err, float):
             if self._sn_threshold == 0:
                 return 0
-            if self._tmp_norm / self._tmp_norm_err < self._sn_threshold:
+            if norm / norm_err < self._sn_threshold:
                 print("\n")
                 print(
-                    f"S/N of {self._tmp_norm/self._tmp_norm_err} below threshold of {self._sn_threshold}"
+                    f"S/N of {norm/norm_err} below threshold of {self._sn_threshold}. segment terminated."
                 )
                 return -1
 
-        if self._norm_tracker.add_val(value=self._tmp_norm) == -1:
-            print("repeating parameters detected")
+        if norm_tracker.add_val(value=norm) == -1:
+            print("repeating parameters detected. segment terminated.")
             return -1
         return 0
 
@@ -304,6 +338,8 @@ class Model:
         best_fit_parameter: list = []
         box_properties: list = []
         seg_model = SegmentModel(shape=(self._dimy, self._dimx))
+        norm_tracker = ParamTracker()
+        box_center = Point()
         for _ in range(step_number):
             x, y = util.calculate_next_boxcenter(
                 angle=angle,
@@ -312,6 +348,8 @@ class Model:
                 direction=direction,
                 dictonary=slope_dict,
             )
+            box_center.x = x
+            box_center.y = y
 
             tmp_box = Box(
                 self.masked_original_data,
@@ -334,8 +372,6 @@ class Model:
                 break
             best_fit_parameter.append([tmp_box.params, tmp_box.param_errs])
             box_properties.append([x, y, w, h])
-            self._tmp_norm = tmp_box.norm
-            self._tmp_norm_err = tmp_box.norm_err
 
             seg_model.paste(
                 tmp_box.model.copy(), x, y, w, h, tmp_box.offset, tmp_box.angle
@@ -345,13 +381,22 @@ class Model:
                 tmp_box.angle, sectors, direction_dict
             )
             direction = util.get_box_direction(direction, possible_directions)
-            self._tmp_peak_pos = tmp_box.peak_pos
-            if self._chek_termination() == -1:
+            if (
+                self._chek_termination(
+                    tmp_box.peak_pos,
+                    tmp_box.norm,
+                    tmp_box.norm_err,
+                    norm_tracker,
+                    box_center,
+                )
+                == -1
+            ):
                 break
 
             x, y = util.correct_box_center_from_peak(
                 x=x, y=y, w=w, h=h, peak_pos=tmp_box.peak_pos
             )
+
         return [best_fit_parameter, seg_model.model, box_properties]
 
     def build(self, steps: tuple[int, int] = (9999, 9999)):
