@@ -11,7 +11,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astrostreampy"
-version = "1.3.2"
+version = "1.3.0"
 authors = [
   { name="Jan-Niklas Pippert", email="pippertjanniklas@gmail.com" },
 ]
@@ -30,4 +30,4 @@ classifiers = [
 "Bug Tracker" = "https://github.com/jnpippert/streamPy/issues"
 
 [tool.setuptools.packages.find]
-exclude = ["sample_images*","*fits","test.py","*.txt"]
+exclude = ["sample_images*","*fits","test.py","*txt"]

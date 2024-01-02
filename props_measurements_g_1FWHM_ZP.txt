@@ -1,2 +1,0 @@
-# SB SB_err+ SB_err- m m_err+ m_err- M M_err+ M_err- SB_eff SB_eff_err+ SB_eff_err- l l_err w w_err r_eff r_eff_err z mu dL kpcscale
-25.24378498178345 0.0 0.0 18.608575659007418 0.0 0.0 -16.409699875415132 0.0 0.0 nan nan nan 36.91113153918383 0.18686961813968986 nan nan nan nan 0.023 35.01827553442255 100.84517103574109 0.46717404534922463
