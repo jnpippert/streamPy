@@ -56,8 +56,8 @@ class InitBox(Point):
         vmin_slider = Slider(
             ax=ax_vmin,
             label="shadows",
-            valmin=np.percentile(data, 1),
-            valmax=np.percentile(data, 99),
+            valmin=np.min(data),
+            valmax=np.max(data),
             valinit=vmin,
             valstep=vmin / 10,
         )
@@ -68,8 +68,8 @@ class InitBox(Point):
         vmax_slider = Slider(
             ax=ax_vmax,
             label="highlights",
-            valmin=np.percentile(data, 1),
-            valmax=np.percentile(data, 99),
+            valmin=np.min(data),
+            valmax=np.max(data),
             valinit=vmax,
             valstep=vmax / 10,
         )
@@ -150,15 +150,18 @@ class InitBox(Point):
         self._pointmode = True
         self._p1mode = False
         self._p2mode = False
+        
         self._cid = point.figure.canvas.mpl_connect(
             "button_press_event", self._mouse_click
         )
         self._fig.suptitle(r"set init point and box", color="k")
-        fig.canvas.mpl_connect("key_press_event", self._key_press)
+        
+        self._fig.canvas.mpl_connect('key_press_event', self._key_press_event)
 
         plt.show()
 
-    def _key_press(self, event):
+    def _key_press_event(self,event):
+        print(f"key pressed {event.key}")
         sys.stdout.flush()
         if event.key == "a":
             self._p1mode = True
@@ -184,6 +187,7 @@ class InitBox(Point):
         Handles mouse clicking events in the matplotlib API.
         This is a private method and should not be used outside this class.
         """
+        
         if event.inaxes != self._point.axes:
             return
         x = int(np.round(event.xdata, 0))

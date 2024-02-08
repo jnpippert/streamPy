@@ -11,9 +11,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "astrostreampy"
-version = "1.3.0"
+version = "1.8.0"
 authors = [
-  { name="Jan-Niklas Pippert", email="pippertjanniklas@gmail.com" },
+  { name="Jan-Niklas Pippert", email="jnpippert@usm.lmu.de" },
 ]
 description = "Package to model stellar tidal streams."
 readme = "README.md"

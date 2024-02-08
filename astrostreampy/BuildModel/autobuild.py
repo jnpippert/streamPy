@@ -12,7 +12,7 @@ from ..Image.point import Point
 from . import utilities as util
 from .box import Box
 from .constants import direction_dict, sectors, slope_dict
-
+from ..utilities import timeit
 warnings.filterwarnings("ignore")
 
 
@@ -97,9 +97,8 @@ class ParamTracker:
             self._rep_count = 1
             return True
         self._rep_count += 1
-        if self._rep_count == 3:
-            return False
-        return True
+        return not (self._rep_count == 3)
+            
 
 
 class Model:
@@ -242,11 +241,11 @@ class Model:
 
         # like that, higher order fitting is more robust
         if h2:
-            self._init_params[6] = 0.1
+            self._init_params[6] = 0.01
         if skew:
-            self._init_params[7] = 0.1
+            self._init_params[7] = 0.01
         if h4:
-            self._init_params[8] = 0.1
+            self._init_params[8] = 0.01
 
         # error monitoring
         self.param_errors = []
@@ -302,17 +301,18 @@ class Model:
             if box_center.isclose(self._head, tol=self._tol):
                 self._head_dist -= 1
 
-        if self._head_dist == 0:
-            print("head reached. segment terminated.")
-            return -1
-
+            if self._head_dist == 0:
+                print("head reached. segment terminated.")
+                return -1
+            return 0
+        
         if self._tail is not None:
             if box_center.isclose(self._tail, tol=self._tol):
                 self._tail_dist -= 1
-
-        if self._tail_dist == 0:
-            print("tail reached. segment terminated.")
-            return -1
+            if self._tail_dist == 0:
+                print("tail reached. segment terminated.")
+                return -1
+            return 0
 
         if peak_pos is None:
             print("no peak for a gaussian fit found. segment terminated.")
@@ -335,6 +335,8 @@ class Model:
 
     def _segment(self, args):
         angle, x, y, w, h, direction, step_number, guess_parameter = args
+        init_w  = w
+        inti_h = h
         best_fit_parameter: list = []
         box_properties: list = []
         seg_model = SegmentModel(shape=(self._dimy, self._dimx))
@@ -396,9 +398,12 @@ class Model:
             x, y = util.correct_box_center_from_peak(
                 x=x, y=y, w=w, h=h, peak_pos=tmp_box.peak_pos
             )
+            if self._vary_box_dim:
+                w,h = util.calculate_new_box_dimensions(tmp_box.angle,init_height=inti_h,init_width=init_w)
 
         return [best_fit_parameter, seg_model.model, box_properties]
 
+    @timeit
     def build(self, steps: tuple[int, int] = (9999, 9999)):
         """
         Does the model building.

@@ -1,7 +1,7 @@
 import numpy as np
 from astropy.io import fits
 
-from .utilities import get_distances
+from .utilities import *
 
 
 def fwhm_mask_from_paramtab(
@@ -49,7 +49,7 @@ def fwhm_mask_from_paramtab(
     mask = np.zeros(model.shape)
 
     res = get_distances(parameter_file, multifits_file)
-
+    center_ids, left_dists, right_dists = res
     for i, row in enumerate(table):
         (x, y, w, h, *_) = row
 
@@ -57,8 +57,6 @@ def fwhm_mask_from_paramtab(
             model_slice = model.copy()[y, x - w : x + w + 1]
         else:
             model_slice = model.copy()[y - h : y + h + 1, x]
-
-        center_ids, left_dists, right_dists = res
 
         if smoothing == 0:
             left_dist = left_dists[i]
@@ -87,3 +85,65 @@ def fwhm_mask_from_paramtab(
     mask[mask > 1] = 0
     mask[mask != 1] = 0
     return mask
+
+
+def effective_mask_from_paramtab(
+    parameter_file: str,
+    multifits_file: str,
+    smoothing: int = 10,
+    verbose: int = 0,
+) -> np.ndarray:
+    if verbose == 1:
+        print(f"creating EFF mask from parameter table '{parameter_file}' ...")
+
+    table = fits.getdata(parameter_file, ext=1)
+
+    model = fits.getdata(multifits_file, ext=4)
+    mask = np.zeros(model.shape)
+    border_mask = np.zeros(model.shape)
+    res = get_effective_distances(parameter_file, multifits_file)
+    center_ids, dists = res
+
+    for i, row in enumerate(table):
+        (x, y, w, h, *_) = row
+
+        if w > h:
+            model_slice = model.copy()[y, x - w : x + w + 1]
+        else:
+            model_slice = model.copy()[y - h : y + h + 1, x]
+
+        if smoothing == 0:
+            dist = dists[i]
+        else:
+            if i < smoothing:
+                dist = np.mean(dists[: i + smoothing + 1])
+            else:
+                dist = np.mean(dists[i - smoothing : i + smoothing + 1])
+        center_id = center_ids[i]
+
+        model_x = np.arange(0, len(model_slice), 1)
+        left = np.argmin(np.abs(model_x - (center_id - dist)))
+        right = np.argmin(np.abs(model_x - (center_id + dist)))
+
+        model_slice[:left] = 0
+        model_slice[right + 1 :] = 0
+        model_slice[left : right + 1] = 1
+
+        if w > h:
+            mask[y, x - w : x + w + 1] += model_slice
+
+        else:
+            mask[y - h : y + h + 1, x] += model_slice
+
+        # border
+        mask_border_ids = np.where(model_slice == 1)[0]
+        model_slice[mask_border_ids[0] + 1 : mask_border_ids[-1]] = 0
+        if w > h:
+            border_mask[y, x - w : x + w + 1] += model_slice
+
+        else:
+            border_mask[y - h : y + h + 1, x] += model_slice
+
+    mask[mask != 1] = 0
+    border_mask[border_mask != 1] = 0
+    return mask, border_mask

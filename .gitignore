@@ -3,16 +3,16 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-#python files
-test.py
+#test files
+test*
 
 #fits files
 *.fits
-
+*.txt
 streampy_multifits.fits
 streampy_paramtab.fits
 
-test.py
+
 # C extensions
 *.so
 

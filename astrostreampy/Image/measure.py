@@ -3,8 +3,10 @@ from typing import Any, Literal
 
 import numpy as np
 from astropy.io import fits
-from astrostreampy.BuildModel.aperture import fwhm_mask_from_paramtab
-from astrostreampy.Image.point import Point
+from ..BuildModel.aperture import *
+from .utilities import *
+from .track import StreamTrack
+from ..BuildModel.utilities import fit_func
 
 _H_0 = 69.6  # km / s / Mpc
 _H = _H_0 / 100.0
@@ -15,18 +17,58 @@ _OMEGA_K = 1 - _OMEGA_M - _OMEGA_R - _OMEGA_VAC
 _C = 299792.458  # km/s
 _N = 1000  # precision of the co-moving radial distance integral
 
+__all__ = ["StreamProperties"]
+
 
 class StreamProperties:
     """
-    Measures the Stream Properties.
+    A class to analyze properties of a stream from astronomical data.
+
+    Parameters
+    ----------
+    multifits_file : str
+        Path to the multifits file containing astronomical data.
+    parameter_file : str
+        Path to the parameter file containing stream parameters.
+    maskfiles : list of str, optional
+        List of mask files for masking irrelevant data. Defaults to None.
+    zero_point_type : {'ZP', 'ZP50'}, optional
+        Type of zero point for calculating absolute magnitudes. Defaults to 'ZP'.
+
+    Attributes
+    ----------
+    multifits_file : str
+        Path to the multifits file containing astronomical data.
+    parameter_file : str
+        Path to the parameter file containing stream parameters.
+
+    Methods
+    -------
+    measure(errorfile=None)
+        Measures various properties of the stream from the data.
+    writeto(filename, overwrite=False, addsuffix=True)
+        Writes the measured properties to a .txt file.
+
+    Example
+    -------
+    >>> measurement = StreamProperties('multifits_file.fits','paramfile.fits',['sourcemask.fits','interpolationmask.fits'],'ZP')
+    >>> measurement.measure('errorfile.fits')
+    >>> measurement.writeto('results.txt')
+    >>> print(measurement) # displays formatted stream properties to the console
     """
 
     def __init__(
         self,
         multifits_file: str,
         parameter_file: str,
+        maskfiles: list[str] = None,
         zero_point_type: Literal["ZP,ZP50"] = "ZP",
     ):
+        if isinstance(maskfiles, list):
+            self._maskfiles = maskfiles
+        else:
+            self._maskfiles = []
+
         if zero_point_type not in ["ZP", "ZP50"]:
             raise ValueError("invalid option for zero_point_type")
         self._zero_point_type = zero_point_type
@@ -39,10 +81,13 @@ class StreamProperties:
             self._data.shape
         )  # None #np.nan_to_num(fits.getdata(multifits_files,ext=6),nan=0)
         self._header = fits.getheader(multifits_file, ext=0)
-        self._aperture = fits.getdata(multifits_file, ext=5)
+        self._aperture: np.ndarray = fits.getdata(multifits_file, ext=5)
+        self._border_aperture: np.ndarray = np.zeros(self._aperture.shape)
+        self._aperture_type: str = "1FWHM"
+        self._model: np.ndarray = fits.getdata(multifits_file, ext=4)
+        self._fillmask: np.ndarray = np.ones(self._aperture.shape)
         self._parameter_table = fits.getdata(parameter_file, ext=1)
-
-        self._pixel_scale = self._header["PXSCALE"]
+        self._pixel_scale = 0.2  # self._header["PXSCALE"]
         self._zero_point = 30  # self._header[zero_point_type]
 
         # init all properties
@@ -57,20 +102,38 @@ class StreamProperties:
             np.nan,
             np.nan,
         ]  # +error, -error
+        self._total_apparent_magnitude: float = np.nan
+        self._total_apparent_magnitude_error: list[float, float] = [
+            np.nan,
+            np.nan,
+        ]  # +error, -error
         self._absolute_magnitude: float = np.nan
         self._absolute_magnitude_error: list[float, float] = [
             np.nan,
             np.nan,
         ]  # +error, -error
+        self._total_absolute_magnitude: float = np.nan
+        self._total_absolute_magnitude_error: list[float, float] = [
+            np.nan,
+            np.nan,
+        ]  # +error, -error
         self._effective_radius: float = np.nan
         self._effective_radius_error: float = np.nan
+        self._mean_effective_surface_brightness: float = np.nan
+        self._mean_effective_surface_brightness_error: list[float, float] = [
+            np.nan,
+            np.nan,
+        ]
         self._effective_surface_brightness: float = np.nan
-        self._effective_surface_brightness_error: list[float, float] = [np.nan, np.nan]
+        self._effective_surface_brightness_error: list[float, float] = [
+            np.nan,
+            np.nan,
+        ]
         self._length: float = np.nan
         self._length_error: float = np.nan
         self._width: float = np.nan
         self._width_error: float = np.nan
-        self._redshift: float = 0.023  # None #self._header["ZSTREAM"]
+        self._redshift: float = 0.0329069  # None #self._header["ZSTREAM"]
         (
             self._distance_modulus,
             self._luminosity_distance,
@@ -93,19 +156,22 @@ class StreamProperties:
         )
         out_string += f"\t \u0394SB\t= {f(self._surface_brightness_error)} {self._filter} mag/arcsec\u00b2\n"
         out_string += "o apparent magnitude\n"
-        out_string += f"\t m\t= {f(self._apparent_magnitude)} {self._filter} mag\n"
         out_string += (
-            f"\t \u0394m\t= {f(self._apparent_magnitude_error)} {self._filter} mag\n"
+            f"\t m_tot\t= {f(self._total_apparent_magnitude)} {self._filter} mag\n"
         )
+        out_string += f"\t \u0394m_tot\t= {f(self._total_apparent_magnitude_error)} {self._filter} mag\n"
         out_string += "o absolute magnitude\n"
-        out_string += f"\t M\t= {f(self._absolute_magnitude)} {self._filter} mag\n"
         out_string += (
-            f"\t \u0394M\t= {f(self._absolute_magnitude_error)} {self._filter} mag\n"
+            f"\t M_tot\t= {f(self._total_absolute_magnitude)} {self._filter} mag\n"
         )
+        out_string += f"\t \u0394M_tot\t= {f(self._total_absolute_magnitude_error)} {self._filter} mag\n"
         out_string += "o effective radius\n"
         out_string += f"\t r\t= {f(self._effective_radius)} kpc\n"
         out_string += f"\t \u0394r\t= \u00b1{f(self._effective_radius_error)} kpc\n"
         out_string += "o effective surface brightness (cosmic dimming)\n"
+        out_string += f"\t <SBe>\t= {f(self._mean_effective_surface_brightness)} {self._filter} mag/arcsec\u00b2\n"
+        out_string += f"\t \u0394<SBe>\t= {f(self._mean_effective_surface_brightness_error)} {self._filter} mag/arcsec\u00b2\n"
+        out_string += "o surface brightness at effective radius (cosmic dimming)\n"
         out_string += f"\t SBe\t= {f(self._effective_surface_brightness)} {self._filter} mag/arcsec\u00b2\n"
         out_string += f"\t \u0394SBe\t= {f(self._effective_surface_brightness_error)} {self._filter} mag/arcsec\u00b2\n"
         out_string += "o width\n"
@@ -162,17 +228,21 @@ class StreamProperties:
         return str(val)
 
     def _create_fillmask(self):
-        raise NotImplementedError
+        for file in self._maskfiles:
+            maskdata = fits.getdata(file)
+            self._fillmask *= maskdata
+        self._fillmask = (self._fillmask * self._aperture) + np.invert(
+            self._aperture.astype(bool)
+        )
 
     def _fill_zero_pixels(self):
-        raise NotImplementedError
+        empty_pixels = np.where(self._fillmask == 0)
+        self._data[empty_pixels] = self._model[empty_pixels]
 
-    def _flux_inside_aperture(self, aperture: np.ndarray = None):
-        if aperture is None:
-            aperture = self._aperture
-        self._data_flux = np.sum((self._data - self._background) * aperture)
+    def _flux_inside_aperture(self):
+        self._data_flux = np.sum((self._data - self._background) * self._aperture)
         self._dimmed_data_flux = self._data_flux * (1 + self._redshift) ** 4
-        self._error_flux = np.sqrt(np.sum(np.square(self._error_data * aperture)))
+        self._error_flux = np.sqrt(np.sum(np.square(self._error_data * self._aperture)))
 
     def _calc_bg_from_offsets(self):
         self._background = np.median(self._parameter_table[f"offset_{self._filter}"])
@@ -184,109 +254,233 @@ class StreamProperties:
         return -2.5 * np.log10(val) + self._zero_point
 
     def _calc_apparent_magnitude(self):
-        self._apparent_magnitude = self._calc_log_flux(self._data_flux)
-        self._apparent_magnitude_error[0] = (
-            self._calc_log_flux(self._data_flux - self._error_flux)
-            - self._apparent_magnitude
+        apparent_magnitude = self._calc_log_flux(self._data_flux)
+        apparent_magnitude_error0 = (
+            self._calc_log_flux(
+                self._data_flux
+                - np.sum(self._aperture) * self._background_error
+                - self._error_flux
+            )
+            - apparent_magnitude
         )
-        self._apparent_magnitude_error[1] = (
-            self._calc_log_flux(self._data_flux + self._error_flux)
-            - self._apparent_magnitude
+        apparent_magnitude_error1 = (
+            self._calc_log_flux(
+                self._data_flux
+                + np.sum(self._aperture) * self._background_error
+                + self._error_flux
+            )
+            - apparent_magnitude
         )
+        if self._aperture_type == "1FWHM":
+            self._apparent_magnitude = apparent_magnitude
+            self._apparent_magnitude_error[0] = apparent_magnitude_error0
+            self._apparent_magnitude_error[1] = apparent_magnitude_error1
+        if self._aperture_type == "3FWHM":
+            self._total_apparent_magnitude = apparent_magnitude
+            self._total_apparent_magnitude_error[0] = apparent_magnitude_error0
+            self._total_apparent_magnitude_error[1] = apparent_magnitude_error1
 
     def _calc_absolute_magnitude(self):
-        self._absolute_magnitude = self._apparent_magnitude - self._distance_modulus
-        self._absolute_magnitude_error = self._apparent_magnitude_error.copy()
+        if self._aperture_type == "1FWHM":
+            self._absolute_magnitude = self._apparent_magnitude - self._distance_modulus
+            self._absolute_magnitude_error = self._apparent_magnitude_error.copy()
+        if self._aperture_type == "3FWHM":
+            self._total_absolute_magnitude = (
+                self._total_apparent_magnitude - self._distance_modulus
+            )
+            self._total_absolute_magnitude_error = (
+                self._total_apparent_magnitude_error.copy()
+            )
 
     def _calc_surface_brightness(self):
         npix = np.sum(self._aperture)
-        self._surface_brightness = self._calc_log_flux(
+        surface_brightness = self._calc_log_flux(
             self._dimmed_data_flux / npix / self._pixel_scale**2
         )
-        self._surface_brightness_error[0] = (
+        surface_brightness_error0 = (
             self._calc_log_flux(
-                (self._dimmed_data_flux - self._error_flux)
+                (
+                    self._dimmed_data_flux
+                    - np.sum(self._aperture) * self._background_error
+                    - self._error_flux
+                )
                 / npix
                 / self._pixel_scale**2
             )
-            - self._surface_brightness
+            - surface_brightness
         )
-        self._surface_brightness_error[1] = (
+        surface_brightness_error1 = (
             self._calc_log_flux(
-                (self._dimmed_data_flux + self._error_flux)
+                (
+                    self._dimmed_data_flux
+                    + np.sum(self._aperture) * self._background_error
+                    + self._error_flux
+                )
                 / npix
                 / self._pixel_scale**2
             )
-            - self._surface_brightness
+            - surface_brightness
+        )
+
+        if self._aperture_type == "1FWHM":
+            self._surface_brightness = surface_brightness
+            self._surface_brightness_error[0] = surface_brightness_error0
+            self._surface_brightness_error[1] = surface_brightness_error1
+        if self._aperture_type == "EFF":
+            self._mean_effective_surface_brightness = surface_brightness
+            self._mean_effective_surface_brightness_error[0] = surface_brightness_error0
+            self._mean_effective_surface_brightness_error[1] = surface_brightness_error1
+
+    def _calc_effective_surface_brightness(
+        self,
+    ) -> None:  # the effective surface brightness at the effective radius
+        npix = np.sum(self._aperture)
+
+        self._effective_surface_brightness = self._calc_log_flux(
+            self._dimmed_data_flux / npix / self._pixel_scale**2
+        )
+        self._effective_surface_brightness_error[0] = (
+            self._calc_log_flux(
+                (
+                    self._dimmed_data_flux
+                    - np.sum(self._aperture) * self._background_error
+                    - self._error_flux
+                )
+                / npix
+                / self._pixel_scale**2
+            )
+            - self._effective_surface_brightness
+        )
+        self._effective_surface_brightness_error[1] = (
+            self._calc_log_flux(
+                (
+                    self._dimmed_data_flux
+                    + np.sum(self._aperture) * self._background_error
+                    + self._error_flux
+                )
+                / npix
+                / self._pixel_scale**2
+            )
+            - self._effective_surface_brightness
         )
 
     def _calc_length(self):
-        x_pos = self._parameter_table["box_x"]
-        y_pos = self._parameter_table["box_y"]
-        i = 1
-        self._length = 0
-        while i < len(x_pos):
-            self._length += Point(x_pos[i], y_pos[i]).distance_to(
-                Point(x_pos[i - 1], y_pos[i - 1])
-            )
-            i += 1
+        stream_track = StreamTrack(self.parameter_file, self.multifits_file)
+        stream_track.fit_spline()
+        self._length = stream_track.length
         self._length = self._length * self._pixel_scale * self._kpc_scale
-        self._length_error = 2 * self._pixel_scale * self._kpc_scale
+        self._length_error = (
+            (2 + stream_track.bin) * self._pixel_scale * self._kpc_scale
+        )
 
-    def writeto(self, filename: str, overwrite: bool = False):
+    def _calc_widths(self):
+        fwhm_widths = []
+        eff_widths = []
+        for row in self._parameter_table:
+            w, h, sigma, norm, h2, skew, h4 = np.array(row)[
+                np.array([2, 3, 6, 8, 16, 18, 20])
+            ]
+            model = fit_func(np.max([w, h]), sigma, norm, 0, h2, skew, h4)  # 0 = offset
+            fwhm_widths.append(fwhm_width(model))
+            eff_widths.append(effective_width(model))
+        self._width = np.median(fwhm_widths) * self._pixel_scale * self._kpc_scale
+        self._width_error = 2 * self._pixel_scale * self._kpc_scale
+        self._effective_radius = (
+            np.median(eff_widths) * self._pixel_scale * self._kpc_scale
+        )
+        self._effective_radius_error = 2 * self._pixel_scale * self._kpc_scale
+
+    def _set_error_data(self, errorfile: str = None) -> None:
+        if isinstance(errorfile, str):
+            self._error_data = fits.getdata(errorfile)
+
+    def _prepare(self):
+        self._create_fillmask()
+        self._fill_zero_pixels()
+
+    def _measure_shape(self) -> None:
+        self._calc_length()
+        self._calc_widths()
+
+    def _measure_brightness(self):
+        self._flux_inside_aperture()
+        if self._aperture_type == "EFF":
+            self._calc_surface_brightness()
+            self._aperture = self._border_aperture
+            self._prepare()
+            self._calc_effective_surface_brightness()
+        if self._aperture_type == "1FWHM":
+            self._calc_apparent_magnitude()
+            self._calc_absolute_magnitude()
+            self._calc_surface_brightness()
+        if self._aperture_type == "3FWHM":
+            self._calc_apparent_magnitude()
+            self._calc_absolute_magnitude()
+
+    def _set_aperture(
+        self, aperture_type: Literal["FWHM", "EFF"], k: int = 1, smoothing: int = 10
+    ) -> None:
+        if aperture_type == "FWHM":
+            # case k = 1 is skipped, as per default the 5th extension of the multifits
+            # is the 1FWHM aperture (see __init__)
+            if k > 1:
+                self._aperture = fwhm_mask_from_paramtab(
+                    self.parameter_file, self.multifits_file, k, smoothing
+                )
+                self._aperture_type = f"{k}FWHM"
+        if aperture_type == "EFF":
+            self._aperture, self._border_aperture = effective_mask_from_paramtab(
+                self.parameter_file, self.multifits_file, smoothing
+            )
+            self._aperture_type = f"EFF"
+
+    def measure(self, errorfile: str = None) -> None:
+        self._set_error_data(errorfile=errorfile)
+        # in first measurement setting the aperture is not needed, as the default is the 1FWHM aperture (__init__())
+        self._calc_bg_from_offsets()
+        self._measure_shape()
+        for aperture_properties in [
+            ["FWHM", 1, 10],
+            ["FWHM", 3, 10],
+            ["EFF", None, 10],
+        ]:
+            aperture_type, k, smoothing = aperture_properties
+            print(
+                f"measuring brightnesses with a {smoothing}x smoothed k={k} {aperture_type} aperture"
+            )
+            self._set_aperture(aperture_type, k, smoothing)
+            self._prepare()
+            self._measure_brightness()
+
+    def writeto(self, filename: str, overwrite: bool = False, addsuffix: bool = True):
         filename = filename.removesuffix(".txt")
-        filename += f"_measurements_{self._filter}_{self._aperture_type}_{self._zero_point_type}"
+        if addsuffix:
+            filename += f"_measurements_{self._filter}_{self._zero_point_type}"
         filename += ".txt"
 
         if filename in os.listdir(".") and not overwrite:
             raise FileExistsError("File already exists. Use overwrite==True.")
 
-        header = "# SB SB_err+ SB_err- "
-        header += "m m_err+ m_err- "
-        header += "M M_err+ M_err- "
+        header = "# <SB> <SB>_err+ <SB>_err- "
+        header += "m_tot m_tot_err+ m_tot_err- "
+        header += "M_tot M_tot_err+ M_tot_err- "
+        header += "<SB_eff> <SB_eff>_err+ <SB_eff>_err- "
         header += "SB_eff SB_eff_err+ SB_eff_err- "
+        header += "r_eff r_eff_err "
         header += "l l_err "
         header += "w w_err "
-        header += "r_eff r_eff_err "
         header += "z mu dL kpcscale\n"
 
         data = f"{self._surface_brightness} {self._surface_brightness_error[0]} {self._surface_brightness_error[1]} "
-        data += f"{self._apparent_magnitude} {self._apparent_magnitude_error[0]} {self._apparent_magnitude_error[1]} "
-        data += f"{self._absolute_magnitude} {self._absolute_magnitude_error[0]} {self._absolute_magnitude_error[1]} "
+        data += f"{self._total_apparent_magnitude} {self._total_apparent_magnitude_error[0]} {self._total_apparent_magnitude_error[1]} "
+        data += f"{self._total_absolute_magnitude} {self._total_absolute_magnitude_error[0]} {self._total_absolute_magnitude_error[1]} "
+        data += f"{self._mean_effective_surface_brightness} {self._mean_effective_surface_brightness_error[0]} {self._mean_effective_surface_brightness_error[1]} "
         data += f"{self._effective_surface_brightness} {self._effective_surface_brightness_error[0]} {self._effective_surface_brightness_error[1]} "
+        data += f"{self._effective_radius} {self._effective_radius_error} "
         data += f"{self._length} {self._length_error} "
         data += f"{self._width} {self._width_error} "
-        data += f"{self._effective_radius} {self._effective_radius_error} "
         data += f"{self._redshift} {self._distance_modulus} {self._luminosity_distance} {self._kpc_scale}"
 
         file = open(filename, "w")
         file.writelines([header, data])
         file.close()
-
-    def redo_aperture(
-        self, criterion: Literal["FWHM, EFF"], k: int = 1, smoothing: int = 10
-    ):
-        if criterion == "FWHM":
-            if k == 1:
-                self._aperture = fits.getdata(self.multifits_file, ext=5)
-                self._aperture_type = "1FWHM"
-            else:
-                self._aperture = fwhm_mask_from_paramtab(
-                    self.parameter_file, self.multifits_file, k, smoothing
-                )
-                self._aperture_type = f"{k}FWHM"
-            return
-        if criterion == "EFF":
-            self._aperture = None  # TODO
-            self._aperture_type = "EFF"
-            return
-
-        print("no valid option for aperture. aperture remains unchanged!")
-
-    def measure(self):
-        self._flux_inside_aperture()
-        self._calc_bg_from_offsets()
-        self._calc_apparent_magnitude()
-        self._calc_absolute_magnitude()
-        self._calc_surface_brightness()
-        self._calc_length()
