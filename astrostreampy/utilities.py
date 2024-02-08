@@ -1,11 +1,12 @@
+import time
+from functools import wraps
+
 import numpy as np
 from astropy.convolution import Gaussian1DKernel, convolve
 from scipy.stats import norm as scn
 
 from .BuildModel.constants import c2_1, c2_2, c4_1, c4_2, c4_3
 from .BuildModel.utilities import create_grid_arrays
-from functools import wraps
-import time
 
 
 def fit_func_2D(
@@ -37,9 +38,7 @@ def fit_func_2D(
     h4_comp = h4v * (c4_1 * vals**4 - c4_2 * vals**2 + c4_3)
     h2_comp = h2v * (c2_1 * vals**2 - c2_2)
     model = (
-        norm
-        * np.exp(-0.5 * vals**2)
-        * (1 + h2_comp + h4_comp + scn.cdf(skewv * vals))
+        norm * np.exp(-0.5 * vals**2) * (1 + h2_comp + h4_comp + scn.cdf(skewv * vals))
     ) + offset
     if seeing is None:
         return model
@@ -60,18 +59,15 @@ def fit_func_1D(x, sigma, norm, offset, h2=0, skew=0, h4=0, seeing: float = None
         return model
     return convolve(model, kernel=kernel, boundary="extend", nan_treatment="fill")
 
-def timeit(
-    func=None
-):
+
+def timeit(func=None):
     def decorator_timeit(func):
         @wraps(func)
         def wrapper_timeit(*args, **kwargs):
             start_time = time.perf_counter()
             result = func(*args, **kwargs)
             end_time = time.perf_counter()
-            print(
-                f"\tfinished after {np.round(end_time - start_time,2)} seconds"
-            )
+            print(f"\tfinished after {np.round(end_time - start_time,2)} seconds")
             return result
 
         return wrapper_timeit
