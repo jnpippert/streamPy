@@ -436,6 +436,29 @@ class StreamProperties:
             self._aperture_type = "EFF"
 
     def measure(self, errorfile: str = None) -> None:
+        """
+        Measure properties of the stream.
+
+        This method calculates various properties of the stream, such as shape and brightness,
+        using different aperture types.
+
+        Parameters
+        ----------
+        errorfile : str, optional
+            Path to the file containing error data. Defaults to None.
+            If no file is given a zero image with the shape of the stream image
+            is used as an error image.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This method sets error data, calculates background from offsets, and measures the shape of the stream.
+        Then, it iterates through different aperture types, setting the aperture, preparing the data
+        (filling masked pixels with model information), and measuring brightness for each aperture type.
+        """
         self._set_error_data(errorfile=errorfile)
         # in first measurement setting the aperture is not needed, as the default is the 1FWHM aperture (__init__())
         self._calc_bg_from_offsets()
