@@ -3,10 +3,11 @@ from typing import Any, Literal
 
 import numpy as np
 from astropy.io import fits
+
 from ..BuildModel.aperture import *
-from .utilities import *
-from .track import StreamTrack
 from ..BuildModel.utilities import fit_func
+from .track import StreamTrack
+from .utilities import *
 
 _H_0 = 69.6  # km / s / Mpc
 _H = _H_0 / 100.0
@@ -432,7 +433,7 @@ class StreamProperties:
             self._aperture, self._border_aperture = effective_mask_from_paramtab(
                 self.parameter_file, self.multifits_file, smoothing
             )
-            self._aperture_type = f"EFF"
+            self._aperture_type = "EFF"
 
     def measure(self, errorfile: str = None) -> None:
         self._set_error_data(errorfile=errorfile)
@@ -452,7 +453,40 @@ class StreamProperties:
             self._prepare()
             self._measure_brightness()
 
-    def writeto(self, filename: str, overwrite: bool = False, addsuffix: bool = True):
+    def writeto(
+        self, filename: str, overwrite: bool = False, addsuffix: bool = True
+    ) -> None:
+        """
+        Write measured properties to a text file.
+
+        Parameters
+        ----------
+        filename : str
+            Name of the file to write to.
+        overwrite : bool, optional
+            Whether to overwrite an existing file. Defaults to False.
+        addsuffix : bool, optional
+            Whether to add the  '_measurements_FILTER_ZPTYPE'
+            suffix to the filename. Defaults to True.
+
+        Raises
+        ------
+        FileExistsError
+            If the file already exists and overwrite is False.
+
+        Notes
+        -----
+        The method writes the following properties to the file:
+        - Surface brightness (SB) and its errors (SB_err+ and SB_err-)
+        - Total apparent magnitude (m_tot) and its errors (m_tot_err+ and m_tot_err-)
+        - Total absolute magnitude (M_tot) and its errors (M_tot_err+ and M_tot_err-)
+        - Mean effective surface brightness (SB_eff) and its errors (SB_eff_err+ and SB_eff_err-)
+        - Effective surface brightness (SB_eff) and its errors (SB_eff_err+ and SB_eff_err-)
+        - Effective radius (r_eff) and its error (r_eff_err)
+        - Length (l) and its error (l_err)
+        - Width (w) and its error (w_err)
+        - Redshift (z), distance modulus (mu), luminosity distance (dL), and kpc scale (kpcscale)
+        """
         filename = filename.removesuffix(".txt")
         if addsuffix:
             filename += f"_measurements_{self._filter}_{self._zero_point_type}"
@@ -481,6 +515,6 @@ class StreamProperties:
         data += f"{self._width} {self._width_error} "
         data += f"{self._redshift} {self._distance_modulus} {self._luminosity_distance} {self._kpc_scale}"
 
-        file = open(filename, "w")
+        file = open(filename, "w", encoding="UTF-8")
         file.writelines([header, data])
         file.close()
