@@ -1,9 +1,10 @@
+import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
-from scipy.interpolate import splrep, BSpline
-from scipy import stats
-import matplotlib.pyplot as plt
 from matplotlib.ticker import MultipleLocator
+from scipy import stats
+from scipy.interpolate import BSpline, splrep
+
 from .point import Point
 
 __all__ = ["StreamTrack"]
@@ -75,6 +76,8 @@ class StreamTrack:
         self.stream: np.ndarray = fits.getdata(multifits_file, ext=2)
         self.length: float = np.nan
         self.bin = 5
+        self.spoints = None
+        self.spline = None
 
     def _flip(self):
         """
@@ -90,7 +93,7 @@ class StreamTrack:
         """
         self.points = self.points[np.argsort(self.points[:, 0])]
 
-    def _bin(self, bin: int = 5):
+    def _bin(self):
         """
         Bin the stream track points with a specified binning factor.
 
@@ -99,12 +102,12 @@ class StreamTrack:
         bin : int, optional
             Binning factor for the stream track. Default is 5.
         """
-        self.bin = bin
+
         points = []
         binned_points = []
         for i, point in enumerate(self.points):
             points.append(point)
-            if i % bin == 0:
+            if i % self.bin == 0:
                 binned_points.append(np.mean(points, axis=0))
                 points = []
         self.points = np.array(binned_points)
@@ -195,7 +198,7 @@ class StreamTrack:
             plt.savefig(out, dpi=dpi)
         plt.show()
 
-    def fit_spline(self, k: int = 2, s: float = 1e6):
+    def fit_spline(self, k: int = 2, s: float = 1e6, bin_factor: int = 5):
         """
         Fit a B-spline to the stream track points.
 
@@ -206,6 +209,7 @@ class StreamTrack:
         s : float, optional
             Smoothness parameter. Default is 1e6.
         """
+        self.bin = bin_factor
         self._bin()
         self._flip()
         self._sort()
