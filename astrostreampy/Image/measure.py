@@ -50,6 +50,17 @@ class StreamProperties:
     writeto(filename, overwrite=False, addsuffix=True)
         Writes the measured properties to a .txt file.
 
+    Notes
+    -----
+    The parsed files have to be the outputs from the
+    'astrostreampy.BuildModel.autobuild.Model.build' method.
+    Further the base files (the stream image) or at least the 0th extension
+    of the 'multifits.fits' file must contain the following header keywords:
+    >>> header['ZP'] : float | header['ZP50'] : float | header['ZPinf'] : float
+    >>> header['PXSCALE'] : float
+    >>> header['ZSTREAM'] : float
+    >>> header['FILTER'] : str
+
     Example
     -------
     >>> measurement = StreamProperties('multifits_file.fits','paramfile.fits',['sourcemask.fits','interpolationmask.fits'],'ZP')
@@ -63,7 +74,7 @@ class StreamProperties:
         multifits_file: str,
         parameter_file: str,
         maskfiles: list[str] = None,
-        zero_point_type: Literal["ZP,ZP50"] = "ZP",
+        zero_point_type: Literal["ZP,ZP50", "ZPinf"] = "ZP",
     ):
         if isinstance(maskfiles, list):
             self._maskfiles = maskfiles
@@ -72,15 +83,14 @@ class StreamProperties:
 
         if zero_point_type not in ["ZP", "ZP50"]:
             raise ValueError("invalid option for zero_point_type")
+
         self._zero_point_type = zero_point_type
         self.multifits_file = multifits_file
         self.parameter_file = parameter_file
         self._data: np.ndarray = np.nan_to_num(
             fits.getdata(multifits_file, ext=2), nan=0
         )
-        self._error_data = np.zeros(
-            self._data.shape
-        )  # None #np.nan_to_num(fits.getdata(multifits_files,ext=6),nan=0)
+        self._error_data = np.zeros(self._data.shape)
         self._header = fits.getheader(multifits_file, ext=0)
         self._aperture: np.ndarray = fits.getdata(multifits_file, ext=5)
         self._border_aperture: np.ndarray = np.zeros(self._aperture.shape)
@@ -88,11 +98,11 @@ class StreamProperties:
         self._model: np.ndarray = fits.getdata(multifits_file, ext=4)
         self._fillmask: np.ndarray = np.ones(self._aperture.shape)
         self._parameter_table = fits.getdata(parameter_file, ext=1)
-        self._pixel_scale = 0.2  # self._header["PXSCALE"]
-        self._zero_point = 30  # self._header[zero_point_type]
+        self._pixel_scale = self._header["PXSCALE"]
+        self._zero_point = self._header[zero_point_type]
 
         # init all properties
-        self._filter = fits.getval(filename=multifits_file, keyword="FILTER", ext=0)
+        self._filter = self._header["FILTER"]
         self._surface_brightness: float = np.nan
         self._surface_brightness_error: list[float, float] = [
             np.nan,
@@ -134,7 +144,7 @@ class StreamProperties:
         self._length_error: float = np.nan
         self._width: float = np.nan
         self._width_error: float = np.nan
-        self._redshift: float = 0.0329069  # None #self._header["ZSTREAM"]
+        self._redshift: float = self._header["ZSTREAM"]
         (
             self._distance_modulus,
             self._luminosity_distance,
@@ -185,6 +195,10 @@ class StreamProperties:
         return ""
 
     def _calc_distmod(self):
+        # python code copied from Ned Wright's Cosmological Calculator:
+        # https://www.astro.ucla.edu/~wright/CosmoCalc.html
+        # corresponding paper:
+        # https://ui.adsabs.harvard.edu/abs/2006PASP..118.1711W/abstract
         z = self._redshift
         z_time = 0  # time from z to now
         cmrd = 0  # co-moving radial distance
