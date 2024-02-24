@@ -1,3 +1,12 @@
+"""
+Provides several useful methods for pixel math and analysis of 1D Gaussians.
+
+Example
+-------
+>>> from utilities import effective_width
+>>> from utilities import fwhm_width
+"""
+
 import numpy as np
 from astropy.convolution import Gaussian2DKernel, interpolate_replace_nans
 from scipy.signal import find_peaks
@@ -36,6 +45,14 @@ def interpolate_zero_pixels(
 
 
 def check_peaks(gauss: np.ndarray):
+    """
+    Check for the number and similarity of peaks in a Gaussian array.
+
+    Parameters
+    ----------
+    gauss : np.ndarray
+        The Gaussian array.
+    """
     peaks = find_peaks(gauss)[0]
     if len(peaks) == 2:
         if np.isclose(gauss[peaks[0]], gauss[peaks[1]]):
@@ -43,7 +60,25 @@ def check_peaks(gauss: np.ndarray):
             print("          Measurements for 'r' and 'w' might be incorrect.")
 
 
-def effective_width(gauss: np.ndarray):
+def effective_width(gauss: np.ndarray) -> float:
+    """
+    Calculate the effective width of a Gaussian array.
+
+    Parameters
+    ----------
+    gauss : np.ndarray
+        The Gaussian array.
+
+    Returns
+    -------
+    float
+        The effective width.
+
+    Notes
+    -----
+    The effective width is defined as the width of the region containing
+    half of the total flux of the Gaussian, centered at the peak.
+    """
     check_peaks(gauss)
     dx = 0
     total_flux = np.sum(gauss)
@@ -54,12 +89,24 @@ def effective_width(gauss: np.ndarray):
             break
 
         dx += 1
-    s = gauss[center_pix - dx : center_pix + dx + 1]
 
     return dx + 0.5
 
 
-def fwhm_width(gauss: np.ndarray):
+def fwhm_width(gauss: np.ndarray) -> int:
+    """
+    Calculate the full width at half maximum (FWHM) of a Gaussian.
+
+    Parameters
+    ----------
+    gauss : np.ndarray
+        The Gaussian array.
+
+    Returns
+    -------
+    fwhm_width : int
+        The FWHM width.
+    """
     check_peaks(gauss)
     dl = 0
     dr = 0
