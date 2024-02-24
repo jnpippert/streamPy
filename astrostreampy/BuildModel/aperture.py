@@ -1,7 +1,16 @@
+"""
+Provides two methods to create stream apertures.
+
+Example
+-------
+>>> from aperture import fwhm_mask_from_paramtab
+>>> from aperture import effective_mask_from_paramtab
+"""
+
 import numpy as np
 from astropy.io import fits
 
-from .utilities import *
+from .utilities import get_distances, get_effective_distances
 
 
 def fwhm_mask_from_paramtab(
@@ -47,7 +56,8 @@ def fwhm_mask_from_paramtab(
 
     model = fits.getdata(multifits_file, ext=4)
     mask = np.zeros(model.shape)
-
+    border_mask = np.zeros(model.shape)
+    center_mask = np.zeros(model.shape)
     res = get_distances(parameter_file, multifits_file)
     center_ids, left_dists, right_dists = res
     for i, row in enumerate(table):
@@ -82,9 +92,25 @@ def fwhm_mask_from_paramtab(
         else:
             mask[y - h : y + h + 1, x] += model_slice
 
-    mask[mask > 1] = 0
+        # border
+        mask_border_ids = np.where(model_slice == 1)[0]
+        model_slice[mask_border_ids[0] + 1 : mask_border_ids[-1]] = 0
+        if w > h:
+            border_mask[y, x - w : x + w + 1] += model_slice
+
+        else:
+            border_mask[y - h : y + h + 1, x] += model_slice
+
+        # center
+        model_slice *= 0
+        model_slice[center_ids[i] - 1 : center_ids[i] + 2] = 1
+        if w > h:
+            center_mask[y, x - w : x + w + 1] += model_slice
+
+        else:
+            center_mask[y - h : y + h + 1, x] += model_slice
     mask[mask != 1] = 0
-    return mask
+    return mask, border_mask, center_mask
 
 
 def effective_mask_from_paramtab(
