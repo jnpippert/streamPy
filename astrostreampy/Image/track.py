@@ -76,14 +76,14 @@ class StreamTrack:
         self.stream: np.ndarray = fits.getdata(multifits_file, ext=2)
         self.length: float = np.nan
         self.bin = 5
-        self.spoints = None
         self.spline = None
+        self.spoints = None
 
     def _flip(self):
         """
         Flip the x and y coordinates if the mode of 'box_y' in parameter data is greater than 1.
         """
-        if stats.mode(self.points).count[0][0] > 1:
+        if stats.mode(self.points).count[0] > 1:
             self._flipped = True
             self.points = np.flip(self.points)[::-1]
 
@@ -102,7 +102,6 @@ class StreamTrack:
         bin : int, optional
             Binning factor for the stream track. Default is 5.
         """
-
         points = []
         binned_points = []
         for i, point in enumerate(self.points):
