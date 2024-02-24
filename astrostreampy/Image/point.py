@@ -1,3 +1,13 @@
+"""
+Provides two classes as a convenience
+to set the intial box and endpoints of the stream.
+
+Example
+-------
+>>> from point import Point
+>>> from point import InitBox
+"""
+
 import sys
 from dataclasses import dataclass, field
 
@@ -11,24 +21,104 @@ __all__ = ["Point", "InitBox"]
 
 @dataclass(eq=True, unsafe_hash=True)
 class Point:
+    """
+    Represents a point in 2D space.
+
+    Attributes
+    ----------
+    x : int
+        The x-coordinate of the point.
+    y : int
+        The y-coordinate of the point.
+    color : str
+        The color associated with the point (default is "red").
+    """
+
     x: int = field(default=0, repr=True, compare=True, hash=True)
     y: int = field(default=0, repr=True, compare=True, hash=True)
-    color: str = field(default="red", repr=False, compare=False, hash=False)
+    color: str = field(
+        default="red", metadata={"repr": False, "compare": False, "hash": False}
+    )
 
     def vector_to(self, point: "Point") -> list[int]:
+        """
+        Computes the vector from this point to another point.
+
+        Parameters
+        ----------
+        point : Point
+            The other point.
+
+        Returns
+        -------
+        List[int]
+            The vector from this point to the given point.
+        """
         return [point.x - self.x, point.y - self.y]
 
     def distance_to(self, point: "Point") -> float:
+        """
+        Computes the Euclidean distance from this point to another point.
+
+        Parameters
+        ----------
+        point : Point
+            The other point.
+
+        Returns
+        -------
+        float
+            The Euclidean distance between this point and the given point.
+        """
         vec = self.vector_to(point)
         return np.sqrt(vec[0] ** 2 + vec[1] ** 2)
 
     def isclose(self, point: "Point", tol: int = 10) -> bool:
+        """
+        Checks if another point is close to this point within a tolerance.
+
+        Parameters
+        ----------
+        point : Point
+            The other point.
+        tol : int, optional
+            The tolerance within which points are considered close, by default 10.
+
+        Returns
+        -------
+        bool
+            True if the other point is close within the tolerance, False otherwise.
+        """
         if abs(self.x - point.x) <= tol and abs(self.y - point.y) <= tol:
             return True
         return False
 
+    def toarray(self) -> np.ndarray:
+        """
+        Converts the point to a NumPy array.
+
+        Returns
+        -------
+        np.ndarray
+            A NumPy array representing the coordinates of the point.
+        """
+        return np.array([self.x, self.y])
+
 
 class InitBox(Point):
+    """
+    Represents an interactive initialization box.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        The data to be visualized.
+    cmap : str, optional
+        The colormap string, by default "YlOrBr".
+    color : str, optional
+        The color of the point, by default "red".
+    """
+
     def __init__(self, data: np.ndarray, cmap: str = "YlOrBr", color: str = "red"):
         super().__init__()
 
@@ -145,37 +235,41 @@ class InitBox(Point):
         self._point = point
         self._p1 = p1
         self._p2 = p2
-        self.tail = Point()
-        self.head = Point()
+        self.tail = None
+        self.head = None
         self._pointmode = True
         self._p1mode = False
         self._p2mode = False
-        
+
         self._cid = point.figure.canvas.mpl_connect(
             "button_press_event", self._mouse_click
         )
         self._fig.suptitle(r"set init point and box", color="k")
-        
-        self._fig.canvas.mpl_connect('key_press_event', self._key_press_event)
+
+        self._fig.canvas.mpl_connect("key_press_event", self._key_press_event)
 
         plt.show()
 
-    def _key_press_event(self,event):
-        print(f"key pressed {event.key}")
+    def _key_press_event(self, event):
         sys.stdout.flush()
         if event.key == "a":
+            print("tail mode")
+            self.tail = Point()
             self._p1mode = True
             self._p2mode = False
             self._pointmode = False
-            self._fig.suptitle(r"set first end point", color="k")
+            self._fig.suptitle(r"set first end point (tail)", color="k")
             self._fig.figure.canvas.draw()
         if event.key == "d":
+            self.head = Point()
+            print("head mode")
             self._p1mode = False
             self._p2mode = True
             self._pointmode = False
-            self._fig.suptitle(r"set second end point", color="k")
+            self._fig.suptitle(r"set second end point (head)", color="k")
             self._fig.figure.canvas.draw()
         if event.key == "w":
+            print("center mode")
             self._p1mode = False
             self._p2mode = False
             self._pointmode = True
@@ -187,7 +281,7 @@ class InitBox(Point):
         Handles mouse clicking events in the matplotlib API.
         This is a private method and should not be used outside this class.
         """
-        
+
         if event.inaxes != self._point.axes:
             return
         x = int(np.round(event.xdata, 0))
