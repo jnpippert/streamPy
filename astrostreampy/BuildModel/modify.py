@@ -76,7 +76,6 @@ class Modifier:
         self._mod.set_data(self._tmp_model)
         self._res.set_data(self._data - self._tmp_model)
         self.fig.canvas.draw()
-        # self.fig.canvas.flush_events()
 
     def _modify(self):
         self._tmp_model = self._model.copy()
@@ -95,6 +94,8 @@ class Modifier:
             else:
                 self._tmp_model[y - h : y + h, x] = 0
 
+        # TODO bug, that pixels remain after they should be set to zero.
+        # Only happens in areas where the modeling failed drastically.
         self._update()
 
     def _close(self):
@@ -105,25 +106,32 @@ class Modifier:
         plt.ioff()
 
     def _save(self):
+        path = "".join(self._multifits_file.split("\\")[:-1])
+        file = self._multifits_file.split("\\")[-1]
+        paramfile = self._param_file.split("\\")[-1]
         table = Table(self._table_data)
         table.remove_rows(np.arange(len(table) - self._upper, len(table), 1))
         table.remove_rows(np.arange(0, self._lower, 1))
         fits.BinTableHDU(table, header=self._table_header).writeto(
-            f"mod_{self._param_file}", overwrite=True
+            f"{path}\\mod_{paramfile}", overwrite=True
         )
-
         hdul = fits.open(self._multifits_file)
         hdul[4].data = self._tmp_model
         hdul[3].data = self._data - self._tmp_model
-        hdul.writeto(f"mod_{self._multifits_file}", overwrite=True)
+        hdul.writeto(f"{path}\\mod_{file}", overwrite=True)
         hdul.close()
 
-    def _do(self):
-        # self._modify()
+    def _check_none_types(self):
+        if self._upper is None:
+            self._upper = 0
+        if self._lower is None:
+            self._lower = 0
 
+    def _do(self):
         while True:
             inp = input("New limit ('lower,upper', blank if finished):")
             if len(inp) == 0:
+                self._check_none_types()
                 self._close()
                 self._save()
                 break
