@@ -1,22 +1,59 @@
-import signal
 import time
 import warnings
+from dataclasses import dataclass, field
 from multiprocessing import Pool
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+import psutil
 from astropy.io import fits
 from astropy.wcs import WCS
 
 from ..Image.point import Point
+from ..utilities import timeit
 from . import utilities as util
 from .box import Box
 from .constants import direction_dict, sectors, slope_dict
-from ..utilities import timeit
+
 warnings.filterwarnings("ignore")
 
 
+@dataclass
+class Monitor:
+    # TODO Docstring
+
+    cpu_usage: list = field(default_factory=lambda: [])
+    ram_usage: list = field(default_factory=lambda: [])
+    time_stamps: list = field(default_factory=lambda: [])
+
+    def monitor(self, time_stamp: float) -> None:
+        # TODO Docstring
+        self.cpu_usage.append(psutil.cpu_percent())
+        self.ram_usage.append(psutil.virtual_memory().percent)
+        self.time_stamps.append(time_stamp)
+
+    def show(self) -> None:
+        # TODO Docstring
+        _, (ax1, ax2) = plt.subplots(2, figsize=(5, 10))
+        ax1.plot(self.time_stamps[1:], self.cpu_usage[1:], ".-", color="k")
+        ax2.plot(self.time_stamps[1:], self.ram_usage[1:], ".-", color="k")
+        np.save("cpu.npy", self.cpu_usage[1:])
+        np.save("time.npy", self.time_stamps[1:])
+        plt.show()
+
+    def close(self) -> None:
+        # TODO Docstring
+        plt.close()
+
+    def save(self, out: str) -> None:
+        np.save(f"{out}_cpu.npy", self.cpu_usage)
+        np.save(f"{out}_ram.npy", self.ram_usage)
+        np.save(f"{out}_time.npy", self.time_stamps)
+
+
 class SegmentModel:
+    # TODO Docstring
     def __init__(self, shape: tuple) -> None:
         self.model = np.full(shape=shape, fill_value=np.nan)
 
@@ -30,8 +67,8 @@ class SegmentModel:
         offset: float,
         angle: float,
     ):
+        # TODO Docstring
         tmp_model = np.full(shape=self.model.shape, fill_value=np.nan)
-        data -= offset
         angle = abs(np.degrees(np.arctan(np.tan(np.radians(angle)))))
         if 40 <= angle <= 50:
             tmp_model[y - h : y + h + 1, x] = data[:, w + 1]
@@ -56,12 +93,16 @@ class ParamTracker:
         List of values added by ``add_val()``.
     """
 
-    values: list = []
-    _value: float = 0
-    _rep_count: int = 1
-    _tmp: float = 0
+    def __init__(self, atol: float = None):
+        self.values: list = []
+        self._value: float = 0
+        self._rep_count: int = 1
+        self._none_count: int = 1
+        self._atol: float = atol
+        self._tmp: float = 0
+        self._tmptmp: float = None
 
-    def add_val(self, value: float):
+    def add_val(self, value: Any):
         """
         Adds a value to the listt of previous values and calls the ``_check()`` method.
 
@@ -75,34 +116,30 @@ class ParamTracker:
         int
             0 if ``_count()`` else -1
         """
-        self._tmp = self._value
         self._value = value
         self.values.append(value)
-        if not self._check():
+        if self._atol is not None and not self._check_close():
             return -1
+        if not self._check_none():
+            return -1
+        self._tmptmp = self._tmp
+        self._tmp = value
         return 0
 
-    def _check(self):
-        """
-        Private method that tracks the repetition of the values in a given range, here 1e-5.
-        If new value is close to the previous, increase counter by one, else reset counter to 1.
+    def _check_none(self):
+        self._none_count += 1
+        if not all([self._value == None]):
+            self._none_count = 1
+        return self._none_count != 3
 
-        Returns
-        -------
-        bool
-            ``False`` if repetion limit reached. Otherwise ``True``.
-        """
-
-        if not np.isclose(self._tmp, self._value, atol=1e-10):
-            self._rep_count = 1
-            return True
+    def _check_close(self):
         self._rep_count += 1
-        return not (self._rep_count == 3)
-            
+        if not all([np.isclose(self._tmp, self._value, atol=self._atol)]):
+            self._rep_count = 1
+        return self._rep_count != 3
 
 
 class Model:
-
     """
     Creates a model object for a stream
 
@@ -112,7 +149,7 @@ class Model:
         self,
         original_data: np.ndarray,
         masked_data: np.ndarray,
-        header: dict,
+        header: fits.Header,
         sourcemask: np.ndarray,
         init_x: int,
         init_y: int,
@@ -190,10 +227,7 @@ class Model:
             Name(-prefix) of all output files.
 
         """
-        # Ctrl+C interrupt handling
-        # signal.signal(signal.SIGINT, self._keyboard_int)
         self._ctrlc = False
-
         self.original_data = original_data
         self.masked_original_data = masked_data
         self.sourcemask = sourcemask
@@ -238,7 +272,7 @@ class Model:
         self._h4 = h4
         self._sn_threshold = sn_threshold
         self._init_params = [self.init_angle, 1, 1, 0, 0, 0, 0, 0, 0]
-
+        self._monitor = None
         # like that, higher order fitting is more robust
         if h2:
             self._init_params[6] = 0.01
@@ -267,26 +301,19 @@ class Model:
         # termination selfs
         self._tol = tol
         self._head = head
-        self._head_dist = self._tol
+        self._head_dist = int(self._tol * 2)
         self._tail = tail
-        self._tail_dist = self._tol
+        self._tail_dist = int(self._tol * 2)
 
-    # def _keyboard_int(self, *args):
-    #     """
-    #     Handles keyboard interrupts. This is a private method and should not be used outside this class.
-    #     """
-    #     print("\n")
-    #     print("Ctrl+C pressed by user, saving current progress")
-    #     # self._save()
-    #     self._ctrlc = True
-
-    def _chek_termination(
+    def _check_termination(
         self,
         peak_pos: float,
         norm: float,
         norm_err: float,
         norm_tracker: ParamTracker,
+        peak_tracker: ParamTracker,
         box_center: Point,
+        bruteforce: bool = False,
     ):
         """
         Checks various termination conditions.
@@ -297,6 +324,11 @@ class Model:
         int
             -1 if any condition is met, otherwise 0.
         """
+
+        if peak_tracker.add_val(value=peak_pos) == -1:
+            print("continously found no peak. segment terminated.")
+            return -1
+
         if self._head is not None:
             if box_center.isclose(self._head, tol=self._tol):
                 self._head_dist -= 1
@@ -304,19 +336,16 @@ class Model:
             if self._head_dist == 0:
                 print("head reached. segment terminated.")
                 return -1
-            return 0
-        
+
         if self._tail is not None:
             if box_center.isclose(self._tail, tol=self._tol):
                 self._tail_dist -= 1
             if self._tail_dist == 0:
                 print("tail reached. segment terminated.")
                 return -1
-            return 0
 
-        if peak_pos is None:
-            print("no peak for a gaussian fit found. segment terminated.")
-            return -1
+        if bruteforce:
+            return 0
 
         if isinstance(norm_err, float):
             if self._sn_threshold == 0:
@@ -331,18 +360,30 @@ class Model:
         if norm_tracker.add_val(value=norm) == -1:
             print("repeating parameters detected. segment terminated.")
             return -1
+
         return 0
 
     def _segment(self, args):
-        angle, x, y, w, h, direction, step_number, guess_parameter = args
-        init_w  = w
+        if self._monitor:
+            t0 = time.perf_counter()
+            monitor = Monitor()
+            monitor.monitor(time.perf_counter() - t0)
+        angle, x, y, w, h, direction, step_number, guess_parameter, bruteforce, name = (
+            args
+        )
+        print(name, "started ...")
+        init_w = w
         inti_h = h
         best_fit_parameter: list = []
         box_properties: list = []
         seg_model = SegmentModel(shape=(self._dimy, self._dimx))
-        norm_tracker = ParamTracker()
+        norm_tracker = ParamTracker(atol=1e-10)
+        peak_tracker = ParamTracker()
         box_center = Point()
         for _ in range(step_number):
+
+            if self._monitor:
+                monitor.monitor(time.perf_counter() - t0)
             x, y = util.calculate_next_boxcenter(
                 angle=angle,
                 x_center=x,
@@ -384,12 +425,14 @@ class Model:
             )
             direction = util.get_box_direction(direction, possible_directions)
             if (
-                self._chek_termination(
+                self._check_termination(
                     tmp_box.peak_pos,
                     tmp_box.norm,
                     tmp_box.norm_err,
                     norm_tracker,
+                    peak_tracker,
                     box_center,
+                    bruteforce,
                 )
                 == -1
             ):
@@ -399,12 +442,18 @@ class Model:
                 x=x, y=y, w=w, h=h, peak_pos=tmp_box.peak_pos
             )
             if self._vary_box_dim:
-                w,h = util.calculate_new_box_dimensions(tmp_box.angle,init_height=inti_h,init_width=init_w)
+                w, h = util.calculate_new_box_dimensions(
+                    tmp_box.angle, init_height=inti_h, init_width=init_w
+                )
 
+        if self._monitor:
+            monitor.show()
+            monitor.close()
+            monitor.save(out=name)
         return [best_fit_parameter, seg_model.model, box_properties]
 
     @timeit
-    def build(self, steps: tuple[int, int] = (9999, 9999)):
+    def build(self, steps: tuple[int, int] = (9999, 9999), monitor: bool = False):
         """
         Does the model building.
 
@@ -434,7 +483,7 @@ class Model:
             First value is the number of iterations the box gets shifted towards the 'init_direction'.
             Second value is the number of iterations the box gets shifted towards the 'post_direction'.
         """
-
+        self._monitor = monitor
         init_box = Box(
             self.masked_original_data,
             x=self.init_x,
@@ -475,6 +524,7 @@ class Model:
             peak_pos=init_box.peak_pos,
         )
         with Pool() as pool:
+
             result = pool.map(
                 self._segment,
                 [
@@ -487,6 +537,8 @@ class Model:
                         dopts[0],
                         steps[0],
                         init_box.params.copy(),
+                        self._head is not None,
+                        "head_segment",
                     ),
                     (
                         init_box.angle,
@@ -497,9 +549,12 @@ class Model:
                         dopts[1],
                         steps[1],
                         init_box.params.copy(),
+                        self._tail is not None,
+                        "tail_segment",
                     ),
                 ],
             )
+
         self._stitch_segment_models(result[0][1], result[1][1])
         self._stitch_best_fit_parameters(
             result[0][0], result[1][0], result[0][2], result[1][2]
@@ -589,14 +644,13 @@ class Model:
         """
         output = self.output + "_multifits.fits"
 
-        # TODO correct header manipulation
         self._header["OBJECT"] = "stream"
         primary_hdu = fits.PrimaryHDU(self.original_data, header=self._header)
         data = np.nan_to_num(self.data.copy(), nan=0)
         self._header["OBJECT"] = "masked intpol stream"
         mrdata_hdu = fits.ImageHDU(self.masked_original_data, header=self._header)
         self._header["OBJECT"] = "sourcemask"
-        mask_hdu = fits.ImageHDU(self.sourcemask)
+        mask_hdu = fits.ImageHDU(self.sourcemask, header=self._header)
         self._header["OBJECT"] = "model"
         model_hdu = fits.ImageHDU(data, header=self._header)
         self._header["OBJECT"] = "residual"
