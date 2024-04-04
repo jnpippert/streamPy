@@ -7,6 +7,7 @@ from astropy.table import Table
 
 
 class Modifier:
+    # TODO Docstring
     def __init__(
         self, multifits_file: str, param_file: str, lower: int = None, upper: int = None
     ):
