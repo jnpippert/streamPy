@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
@@ -106,19 +108,20 @@ class Modifier:
         plt.ioff()
 
     def _save(self):
-        path = "".join(self._multifits_file.split("\\")[:-1])
-        file = self._multifits_file.split("\\")[-1]
-        paramfile = self._param_file.split("\\")[-1]
+        filepath = Path(self._multifits_file)
+        path = filepath.parent
+        file = filepath.name
+        paramfile = Path(self._param_file).name
         table = Table(self._table_data)
         table.remove_rows(np.arange(len(table) - self._upper, len(table), 1))
         table.remove_rows(np.arange(0, self._lower, 1))
         fits.BinTableHDU(table, header=self._table_header).writeto(
-            f"{path}\\mod_{paramfile}", overwrite=True
+            filepath.joinpath(f"mod_{paramfile}"), overwrite=True
         )
         hdul = fits.open(self._multifits_file)
         hdul[4].data = self._tmp_model
         hdul[3].data = self._data - self._tmp_model
-        hdul.writeto(f"{path}\\mod_{file}", overwrite=True)
+        hdul.writeto(filepath.joinpath(f"mod_{file}"), overwrite=True)
         hdul.close()
 
     def _check_none_types(self):
