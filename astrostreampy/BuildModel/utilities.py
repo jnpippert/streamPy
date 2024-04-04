@@ -1,6 +1,10 @@
 import numpy as np
+from astropy.convolution import Gaussian1DKernel, convolve
 from astropy.io import fits
 from scipy.signal import find_peaks
+from scipy.stats import norm as scn
+
+from .constants import *
 
 
 def intro():
@@ -402,3 +406,38 @@ def get_effective_distances(parameter_file, multifits_file):
         center_ids.append(center_id)
 
     return center_ids, dists
+
+
+def fit_func(
+    size: int,
+    sigma: float,
+    norm: float,
+    offset: float,
+    h2: float,
+    skew: float,
+    h4: float,
+    psf: float = None,
+) -> np.ndarray:
+    """
+    The fit function parsed into ``lmfit.Model``. All parameters are varied by LMfit-py.
+    Every call a new set of parameters is used to create a model image with the size of the box.
+    Before returning the model array it gets convovled by the seeing, this ensure that the intrinsic
+    Gaussian parameters are fitted. This is a private method and should not be used outside this class.
+
+    """
+
+    vals = np.arange(-size, size + 1, 1) / sigma
+    h4_comp = h4 * (c4_1 * vals**4 - c4_2 * vals**2 + c4_3)
+    h2_comp = h2 * (c2_1 * vals**2 - c2_2)
+    model = (
+        norm * np.exp(-0.5 * vals**2) * (1 + h2_comp + h4_comp + scn.cdf(skew * vals))
+    ) + offset
+
+    if isinstance(psf, float):
+        return convolve(
+            model,
+            kernel=Gaussian1DKernel(stddev=psf),
+            boundary="extend",
+            nan_treatment="fill",
+        )
+    return model
