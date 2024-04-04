@@ -1,15 +1,40 @@
+"""
+Provides two classes as a convenience
+inspect the model quality and to inspect images for tidal features.
+
+Example
+-------
+>>> from inspect import Slice
+>>> from inspect import Inspect
+"""
+
 import sys
 
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.io import fits
+from astropy.wcs import WCS
 from matplotlib.gridspec import GridSpec
 from matplotlib.patches import Rectangle
 from matplotlib.widgets import Button, Slider
 
+__all__ = ["Slice", "Inspect"]
+
 
 class Stretch:
+    """A class for stretching FITS data."""
+
     def __init__(self, filename: str, ext: int = 0):
+        """
+        Initialize Stretch object.
+
+        Parameters
+        ----------
+        filename : str
+            The filename of the FITS file.
+        ext : int, optional
+            The extension number to read from the FITS file, by default 0
+        """
         self._data = fits.getdata(filename, ext)
         self._aperture = fits.getdata(filename, ext=5)
         self._data = np.nan_to_num(self._data, nan=0)
@@ -18,24 +43,67 @@ class Stretch:
         self._stretched_data = None
 
     def _asinh_scale(self, array):
+        """
+        Apply the arcsinh stretch to the given array.
+
+        Parameters
+        ----------
+        array : np.ndarray
+            The input array.
+
+        Returns
+        -------
+        np.ndarray
+            The array after applying the arcsinh stretch.
+        """
         self._stretched_data = np.arcsinh(self._data)
         if isinstance(array, np.ndarray):
             return np.arcsinh(array)
 
     def _log_scale(self, array):
+        """
+        Not implemented.
+
+        Raises
+        ------
+        NotImplementedError
+            This method is not implemented.
+        """
         raise NotImplementedError
 
     def _lin_scale(self, array: np.ndarray = None):
+        """
+        Apply a linear stretch to the given array.
+
+        Parameters
+        ----------
+        array : np.ndarray, optional
+            The input array, by default None
+
+        Returns
+        -------
+        np.ndarray
+            The array after applying the linear stretch.
+        """
         self._stretched_data = self._data
         if isinstance(array, np.ndarray):
             return array
 
     def _calc_cuts(self):
+        """
+        Calculate vmin and vmax values for stretching the data.
+        """
         self._vmin = np.percentile(self._stretched_data, 10)
         self._vmax = np.percentile(self._stretched_data, 90)
 
 
 class Slice(Stretch):
+    """
+    Loads the Slice Inspection tool.
+
+    Its a user convenience to inspect the quality of the model.
+    """
+
     # TODO log and asinh buttons
     # TODO vmin and vmax slider
     def __init__(self, filename: str, paramfile: str):
@@ -44,7 +112,7 @@ class Slice(Stretch):
         self._model = fits.getdata(filename, ext=4)
         self._model = np.nan_to_num(self._model, nan=0)
         self._params = fits.getdata(paramfile, ext=1)
-        init_n = 60  # int(len(self._params) / 2)
+        init_n = int(len(self._params) / 2)
         self._offset = self._params[init_n][10]
         self._index = init_n
         self._x, self._y, self._width, self._height = self._params[init_n][:4]
@@ -322,10 +390,55 @@ class Slice(Stretch):
 
 
 class Inspect:
-    def __init__(self, filename, cell_size=2000):
-        # TODO implement best scaling for feature identification
+    """
+    Class to load the inspection window on instantiation of the class.
+
+
+    Initialize Inspect object. Is used to inspect a large wide field image. It
+    converts the image into grid cells and loads each cell into a inspection window.
+    The user then can by pressing keys and mouse to select detected features.
+
+    Left mouse click marks a feature with a dot.
+    Pressing 'e' enters the current feature and store it into the
+    ``features`` and ``positions`` list.
+    Pressing 'd' loads the next cell and adds the current feature to the lists. If no
+    feature is clicked, it only loads the cell.
+    Pressing 'a' loads the previous cell and adds the current feature to the lists. If no
+    feature is clicked, it only loads the cell.
+
+    The inspection is finished when closing the inspection window.
+
+    Parameters
+    ----------
+    filename : str
+        The filename of the FITS file.
+    cell_size : int, optional
+        The size of each cell. Default is 2000 pixel.
+    vmin : float
+        The lower scale limit for the image colormapping.
+    vmax : float
+        The uper scale limit for the image colormapping.
+
+    Attributes
+    ----------
+    features : list
+        List of the features. For now every feature is assigned the name 'feature'.
+    positions : list
+        List of the positions of the features. Contains the x and y and the RA and DEC
+        position in the whole stack image.
+    """
+
+    def __init__(
+        self,
+        filename: str,
+        cell_size: int = 2000,
+        vmin: float = None,
+        vmax: float = None,
+    ):
         self.filename = filename
         self.stackdata, self.stackheader = fits.getdata(filename, header=True)
+        self.stackdata = np.nan_to_num(self.stackdata, nan=0)
+        self.stackwcs = WCS(self.stackheader)
         self._cell_size = cell_size
         self._stack_height, self._stack_width = self.stackdata.shape
         self._lower_offsets = []
@@ -337,7 +450,10 @@ class Inspect:
         self._aquire_cells()
         self.features = []
         self.positions = []
-
+        self.x = None
+        self.y = None
+        self.ra = None
+        self.dec = None
         fig, ax = plt.subplots()
         fig.suptitle(f"cell {self._cell_id + 1}")
         ax.set_title(r"$click$ $to$ $set$ $point$", color="dimgray")
@@ -346,10 +462,18 @@ class Inspect:
         y, x = self.stackdata.shape
         y = int(y / 2)
         x = int(x / 2)
-        vmin, vmax = [-0.1, 4]
-        # vmin,vmax = np.percentile(self.stackdata,(2,98))
+        if vmin is None:
+            vmin = np.percentile(self.stackdata, 2)
+        if vmax is None:
+            vmax = np.percentile(self.stackdata, 98)
+        print(f"vmin = {vmin}, vmax = {vmax}")
         img = ax.imshow(
-            self._cells[0], vmin=vmin, vmax=vmax, origin="lower", cmap="YlOrBr_r"
+            self._cells[0],
+            vmin=vmin,
+            vmax=vmax,
+            origin="lower",
+            cmap="YlOrBr_r",
+            interpolation="bicubic",
         )
 
         self._fig = fig
@@ -366,9 +490,9 @@ class Inspect:
     def _key_press(self, event):
         sys.stdout.flush()
         if event.key == "e":
-            if isinstance(self._point.get_xdata(), int):
+            if isinstance(self._point.get_xdata()[0], int):
                 self.features.append("feature")
-                self.positions.append((self.x, self.y))
+                self.positions.append((self.x, self.y, self.ra, self.dec))
                 self._point.set_data([], [])
                 self._feature = None
                 print("feature added")
@@ -380,10 +504,23 @@ class Inspect:
                 self._cell_id = 0
             self._img.set_data(self._cells[self._cell_id])
             self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
-
-            if isinstance(self._point.get_xdata(), int):
+            if isinstance(self._point.get_xdata()[0], int):
                 self.features.append("feature")
-                self.positions.append((self.x, self.y))
+                self.positions.append((self.x, self.y, self.ra, self.dec))
+                self._point.set_data([], [])
+                self._feature = None
+                print("feature added")
+            self._point.figure.canvas.draw()
+            self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
+        if event.key == "a":
+            self._cell_id -= 1
+            if self._cell_id == -1:
+                self._cell_id = len(self._cells) - 1
+            self._img.set_data(self._cells[self._cell_id])
+            self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
+            if isinstance(self._point.get_xdata()[0], int):
+                self.features.append("feature")
+                self.positions.append((self.x, self.y, self.ra, self.dec))
                 self._point.set_data([], [])
                 self._feature = None
                 print("feature added")
@@ -399,6 +536,9 @@ class Inspect:
         y = int(np.round(event.ydata, 0))
         self.x = x + self._left_offsets[self._cell_id]
         self.y = y + self._lower_offsets[self._cell_id]
+        coord = self.stackwcs.pixel_to_world(x, y)
+        self.ra = coord.ra.to_value() / 15
+        self.dec = coord.dec.to_value()
         self._point.set_data(x, y)
         self._point.figure.canvas.draw()
         self._fig.suptitle(f"cell {self._cell_id + 1}, feature: {self._feature}")
@@ -407,17 +547,16 @@ class Inspect:
         return self.stackdata[lower_index:upper_index, left_index:right_index]
 
     def _aquire_cells(self):
+
         left_index = 0
         while left_index < self._stack_width:
             lower_index = 0
             right_index = min(left_index + self._cell_size, self._stack_width)
             while lower_index < self._stack_height:
                 upper_index = min(lower_index + self._cell_size, self._stack_height)
-
                 d = self._get_cell(left_index, right_index, lower_index, upper_index)
-                if np.median(d) != 0:
-                    self._cells.append(np.log10((d) + np.sqrt((d) ** 2 + 1)))
-                    # self._cells.append(d)
+                if np.median(d) != 0:  # removes low S/N border cells
+                    self._cells.append(d)
                     self._lower_offsets.append(lower_index)
                     self._left_offsets.append(left_index)
                 lower_index += self._cell_size
