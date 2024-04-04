@@ -71,15 +71,15 @@ fits.append("mod_streampy_multifits.fits", aperture_mask)
 to create an aperture mask, which is a ```numpy.ndarray``` and append it to the multifits. This is also needed when inspecting the model quality with ```Slice```.
 The other two returns ```_``` are a central and outline 1D mask.
 
-Lastly, to measure photometric properties use the ```StreamProperties``` class. For correct measurements an ***ERRORFILE** is needed.
+Lastly, to measure photometric properties use the ```StreamProperties``` class. For correct measurements an ***ERRORFILE** is needed. The arguments ```redshift```,```zeropoint``` and ```pixelscale``` could be left out if they are present in the header of the multifits.
 ```
 s = StreamProperties(
-        "mod_conv2dtest_multifits.fits",
-        "mod_conv2dtest_paramtab.fits",
+        "mod_streampy_multifits.fits",
+        "mod_streampy_paramtab.fits",
         maskfiles=[mask_name, inter_name],
-        redshift=0.0329069,
-        zeropoint=30.1151,
-        pixelscale=0.2,
+        redshift=REDSHIFT,
+        zeropoint=ZEROPOINT,
+        pixelscale=PIXELSCALE,
     )
 s.measure(errorfile=ERRORFILE) # If no error file is given a global error of 0 is assumed
 print(s)
