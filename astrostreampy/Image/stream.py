@@ -27,20 +27,22 @@ class Stream:
 
         masks : list, optional
             List of filenames of one or multiple masks. If any file is a multiple extension FITS, the desired
-            data-array need to be the first entry in the HDUL. The masks are used to mask other light sources in the image.
+            data-array need to be the first entry in the HDUL.
+            The masks are used to mask other light sources in the image.
 
         interpolation_masks : list, optional
-            List of filenames of one or multiple interpolation masks. If any file is a multiple extension FITS, the desired
-            data-array need to be the first entry in the HDUL. The masks are used to mask light sources which lie in or overlap
-            with the stream. Masked pixels from the interpolation masks are later interpolated.
+            List of filenames of one or multiple interpolation masks. If any file is a multiple extension FITS,
+            the desired data-array need to be the first entry in the HDUL.
+            The masks are used to mask light sources which lie in or overlap with the stream.
+            Masked pixels from the interpolation masks are later interpolated.
 
         save_mask : bool, optional
             If ``True`` the masks of the parsed mask-lists are combined to one and saved as a fits file respectively.
             By default this parameter is set to ``True``.
 
         angle : float, optional
-            The approximate angle of the stream. This is used to increase the quality of the interpolation process, by
-            interpolating along the stream with respect to the given angle.
+            The approximate angle of the stream. This is used to increase the quality of the interpolation process,
+            by interpolating along the stream with respect to the given angle.
         """
 
         if masks is None:
