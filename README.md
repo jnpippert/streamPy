@@ -1,5 +1,4 @@
 # streamPy
-
 To create a stream model you need the following files:
   - the **IMAGE** file
   - a **MASK** of all nearby, and overlapping sources
