@@ -1,3 +1,9 @@
+"""
+Module containing the Stream class.
+
+>>> from stream import Stream
+"""
+
 import numpy as np
 from astropy.io import fits
 
