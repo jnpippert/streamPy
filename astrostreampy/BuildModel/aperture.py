@@ -119,6 +119,35 @@ def effective_mask_from_paramtab(
     smoothing: int = 10,
     verbose: int = 0,
 ) -> np.ndarray:
+    """
+    Creates the aperture mask from the fit parameter table.
+    It iterates over every row of the table, i.e. slice of the stream,
+    and sets every pixel farther away than an effective width to zero.
+    The effective width is the width of the Gaussian in which 50 percent
+    of the flux is captured. The `width` is caclulated a a running mean at
+    each iteration step.
+
+    Parameters
+    ----------
+    param_file : str
+        A ``_paramtab.fits`` file created by the ``streampy.BuildModel.autobuild.build`` method.
+
+    multifits_file : str
+        A ``_multifits.fits`` file created by the ``streampy.BuildModel.autobuild.build`` method.
+
+    k : int
+        Kappa value.
+
+    out : str, optional
+        The name of the output files. If not None, then the mask is saved as a FITS file.
+
+    verbose : int, optional
+        Toggles some console outputs.
+
+    Returns
+    -------
+    mask : `np.ndarray`
+    """
     if verbose == 1:
         print(f"creating EFF mask from parameter table '{parameter_file}' ...")
 
