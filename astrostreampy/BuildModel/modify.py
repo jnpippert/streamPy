@@ -116,12 +116,12 @@ class Modifier:
         table.remove_rows(np.arange(len(table) - self._upper, len(table), 1))
         table.remove_rows(np.arange(0, self._lower, 1))
         fits.BinTableHDU(table, header=self._table_header).writeto(
-            filepath.joinpath(f"mod_{paramfile}"), overwrite=True
+            path.joinpath(f"mod_{paramfile}"), overwrite=True
         )
         hdul = fits.open(self._multifits_file)
         hdul[4].data = self._tmp_model
         hdul[3].data = self._data - self._tmp_model
-        hdul.writeto(filepath.joinpath(f"mod_{file}"), overwrite=True)
+        hdul.writeto(path.joinpath(f"mod_{file}"), overwrite=True)
         hdul.close()
 
     def _check_none_types(self):
