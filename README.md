@@ -38,7 +38,7 @@ When satisfied close the plot by closing the window. ```stream.data()``` is the 
 ```
 init_box = InitBox(data=stream.data)
 ```
-The modeling is set up and started with the ```Model``` class. It will output two files with the prefix parsed by the "output" argument and suffixes of ```_multifits.fits``` and ```_paramtab.fits```.
+The modeling is set up and started with the ```Model``` class. It will output two files with the prefix parsed by the ```output``` argument and suffixes of ```_multifits.fits``` and ```_paramtab.fits```.
 ```
 model = Model(
             original_data=stream.original_data,
@@ -71,7 +71,7 @@ fits.append("mod_streampy_multifits.fits", aperture_mask)
 to create an aperture mask, which is a ```numpy.ndarray``` and append it to the multifits. This is also needed when inspecting the model quality with ```Slice```.
 The other two returns ```_``` are a central and outline 1D mask.
 
-Lastly, to measure photometric properties use the ```StreamProperties``` class.
+Lastly, to measure photometric properties use the ```StreamProperties``` class. For correct measurements an ***ERRORFILE** is needed.
 ```
 s = StreamProperties(
         "mod_conv2dtest_multifits.fits",
@@ -81,7 +81,7 @@ s = StreamProperties(
         zeropoint=30.1151,
         pixelscale=0.2,
     )
-s.measure(errorfile="e.TS0120+1930_g.fits") # If no error file is given a global error of 0 is assumed
+s.measure(errorfile=ERRORFILE) # If no error file is given a global error of 0 is assumed
 print(s)
 s.writeto("streampy.txt", overwrite=True) # Per default adds an '_measurements' suffix.
 # For comparison measure again on the model
