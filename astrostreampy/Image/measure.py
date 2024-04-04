@@ -8,6 +8,7 @@ Example
 """
 
 import os
+from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
@@ -63,7 +64,9 @@ class StreamProperties:
 
     Example
     -------
-    >>> measurement = StreamProperties('multifits_file.fits','paramfile.fits',['sourcemask.fits','interpolationmask.fits'],'ZP')
+    >>> measurement = StreamProperties('multifits_file.fits','paramfile.fits',
+    >>>                                ['sourcemask.fits','interpolationmask.fits'],
+    >>>                                'ZP')
     >>> measurement.measure('errorfile.fits')
     >>> measurement.writeto('results.txt')
     >>> print(measurement) # displays formatted stream properties to the console
@@ -111,6 +114,7 @@ class StreamProperties:
         else:
             self._zero_point = zeropoint
 
+        self._color_measurement = False
         # init all properties
         self._filter = fits.getval(filename=multifits_file, keyword="FILTER", ext=0)
         self._surface_brightness: float = np.nan
@@ -423,6 +427,8 @@ class StreamProperties:
         bg: float = None,
         bg_err: float = 0,
         measure_model: bool = False,
+        color_parameter_file: str = None,
+        color_multifits_file: str = None,
     ) -> None:
         """
         Method to measure the stream with a given aperture.
@@ -468,6 +474,15 @@ class StreamProperties:
             self._background_error = bg_err
         self._measure_shape()
 
+        if isinstance(color_parameter_file, (str, Path)) and isinstance(
+            color_multifits_file, (str, Path)
+        ):
+            print(f"measuring {self.multifits_file} ...")
+            self.parameter_file = color_parameter_file
+            self.multifits_file = color_multifits_file
+            print(f"... using {self.multifits_file} as colorfile!")
+            self._color_measurement = True
+
         for aperture_properties in [
             ["FWHM", 1, 10],
             ["FWHM", 3, 10],
@@ -503,12 +518,16 @@ class StreamProperties:
         filename = filename.removesuffix(".txt")
         if addsuffix:
             filename += f"_measurements_{self._filter}_{self._zero_point_type}"
+        if self._color_measurement:
+            filename += "_color"
         filename += ".txt"
 
         if filename in os.listdir(".") and not overwrite:
             raise FileExistsError("File already exists. Use overwrite==True.")
 
         header = "# <SB> <SB>_err+ <SB>_err- "
+        header += "m m_err+ m_err- "
+        header += "M M_err+ M_err- "
         header += "m_tot m_tot_err+ m_tot_err- "
         header += "M_tot M_tot_err+ M_tot_err- "
         header += "<SB_eff> <SB_eff>_err+ <SB_eff>_err- "
@@ -519,6 +538,8 @@ class StreamProperties:
         header += "z mu dL kpcscale\n"
 
         data = f"{self._surface_brightness} {self._surface_brightness_error[0]} {self._surface_brightness_error[1]} "
+        data += f"{self._apparent_magnitude} {self._apparent_magnitude_error[0]} {self._apparent_magnitude_error[1]} "
+        data += f"{self._absolute_magnitude} {self._absolute_magnitude_error[0]} {self._absolute_magnitude_error[1]} "
         data += f"{self._total_apparent_magnitude} {self._total_apparent_magnitude_error[0]} {self._total_apparent_magnitude_error[1]} "
         data += f"{self._total_absolute_magnitude} {self._total_absolute_magnitude_error[0]} {self._total_absolute_magnitude_error[1]} "
         data += f"{self._mean_effective_surface_brightness} {self._mean_effective_surface_brightness_error[0]} {self._mean_effective_surface_brightness_error[1]} "
