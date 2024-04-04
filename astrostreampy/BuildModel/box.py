@@ -1,7 +1,7 @@
 from datetime import datetime
 
 import numpy as np
-from astropy.convolution import Gaussian1DKernel, convolve
+from astropy.convolution import Gaussian2DKernel, convolve_fft
 from lmfit import Model
 from scipy.stats import norm as scn
 
@@ -9,6 +9,7 @@ from .constants import c2_1, c2_2, c4_1, c4_2, c4_3
 from .utilities import calc_fwhm_pos, create_grid_arrays
 
 
+# TODO make that modeling works without parsing a psf for convolution
 class Box:
     """
     Creates a box object, which represents a small segemnt of the stream.
@@ -71,11 +72,14 @@ class Box:
         if init is None:
             init = [0, 1, 1, 0, 0, 0, 0, 0, 0]
 
-        self._psf = Gaussian1DKernel(stddev=seeing)
         data = original_data.copy()[
             y - height : y + height + 1, x - width : x + width + 1
         ]
-        data[data == 0] = np.nan
+        if seeing is not None:
+            self._psf = Gaussian2DKernel(seeing, seeing)
+        else:
+            self._psf = None
+
         self.data = data
         self._y_grid, self._x_grid = create_grid_arrays(width, height)
         self.height = height
@@ -169,21 +173,17 @@ class Box:
     ) -> np.ndarray:
         """
         The fit function parsed into ``lmfit.Model``. All parameters are varied by LMfit-py.
-        Every call a new set of parameters is used to create a model image with the size of the box.
-        Before returning the model array it gets convovled by the seeing, this ensure that the intrinsic
-        Gaussian parameters are fitted. This is a private method and should not be used outside this class.
+        Every call a new set of parameters is used to create a model image with the size
+        of the box. Before returning the model array it gets convovled by the seeing,
+        this ensure that the intrinsic Gaussian parameters are fitted.
+        This is a private method and should not be used outside this class.
 
         """
         grid = np.sin(np.radians(angle)) * (self._y_grid - y0) + np.cos(
             np.radians(angle)
         ) * (self._x_grid - x0)
 
-        if self._nan_policy:
-            ravel_grid = np.ravel(grid[~np.isnan(self.data)])
-        else:
-            ravel_grid = np.ravel(grid)
-
-        vals = ravel_grid / sigma
+        vals = grid / sigma
         h4_comp = h4v * (c4_1 * vals**4 - c4_2 * vals**2 + c4_3)
         h2_comp = h2v * (c2_1 * vals**2 - c2_2)
         model = (
@@ -192,20 +192,23 @@ class Box:
             * (1 + h2_comp + h4_comp + scn.cdf(skewv * vals))
         ) + offset
 
-        return convolve(
-            model, kernel=self._psf, boundary="extend", nan_treatment="fill"
+        if self._psf is None:
+            model[self.data == 0] = 0
+            return model
+
+        model_conv = convolve_fft(
+            model, self._psf, boundary="wrap", nan_treatment="interpolate"
         )
+        model_conv[self.data == 0] = 0
+        return model_conv
 
     def fit_model(self):
         """
         Starts the parameter fitting.
         """
-        self._nan_policy = True
-        ravel_data = np.ravel(self.data[~np.isnan(self.data)])
-
         try:
             result = self._func_model.fit(
-                ravel_data, self._func_params, xy=None
+                self.data.copy(), self._func_params, xy=None
             )  # xy is just a place holder
         except ValueError:
             return -1
@@ -232,11 +235,11 @@ class Box:
         """
         Uses ``_func()`` do create the box model based on the best fit parameters found.
         """
-        self._nan_policy = False
-
         model = self._fitfunc(None, *self.params)
         self.model = model.reshape(self.data.shape)
-
+        self.model[self.model == 0] = np.nan
+        self.model -= self.offset
+        self.model = np.nan_to_num(self.model, nan=0)
         if self.width > self.height:
             data_slice = self.model[self.height]
         else:
