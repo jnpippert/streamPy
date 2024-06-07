@@ -16,7 +16,7 @@ The **IMAGE** header must contain the following keys:
 First import all necessary classes and methods and define the files as variables.
 ```
 from astrostreampy.Image.stream import Stream
-from astrostreampy.Image.point import Point
+from astrostreampy.Image.point import InitBox
 from astrostreampy.BuilModel.autobuild import Model
 from astrostreampy.BuildModel.modify import Modifier
 from astrostreampy.BuildModel.aperture import fwhm_mask_from_paramtab
@@ -56,7 +56,8 @@ model = Model(
             h4=False,
             output="streampy",
         )
-        model.show()
+model.build()
+model.show()
 ```
 If ```model.show()``` reveals that the algorithm went beyond the stream call the ```Modifier``` class to cut those regions off. A window opens displaying the image, model, and residual. Type in the terminal the lower and upper indices separated by "," and press *ENTER*. The model and residual changes are based on the input. Repeat it as often as desired. When finished leave the line empty and press *ENTER* again. It saves the modified files with the prefix ```mod_```. With given ```upper``` and ```lower``` arguments the modification is done automatically.
 ```
