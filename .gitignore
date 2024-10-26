@@ -11,7 +11,7 @@ test*
 *.txt
 streampy_multifits.fits
 streampy_paramtab.fits
-
+*.png
 
 # C extensions
 *.so
