@@ -104,6 +104,8 @@ class StreamProperties:
         self._model: np.ndarray = fits.getdata(multifits_file, ext=4)
         self._fillmask: np.ndarray = np.ones(self._aperture.shape)
         self._parameter_table = fits.getdata(parameter_file, ext=1)
+
+        # TODO add try block for proper header key handling
         if pixelscale is None:
             self._pixel_scale = self._header["PXSCALE"]
         else:
@@ -274,7 +276,16 @@ class StreamProperties:
         self._error_flux = np.sqrt(np.sum(np.square(self._error_data * self._aperture)))
 
     def _calc_bg_from_offsets(self):
-        self._background = np.median(self._parameter_table[f"offset_{self._filter}"])
+        if np.isnan(np.mean(self._parameter_table[f"offset_{self._filter}_err"])):
+            self._background = np.median(
+                self._parameter_table[f"offset_{self._filter}"]
+            )
+        else:
+            self._background = np.average(
+                self._parameter_table[f"offset_{self._filter}"],
+                weights=1 / self._parameter_table[f"offset_{self._filter}_err"],
+            )
+
         self._background_error = sem(self._parameter_table[f"offset_{self._filter}"])
 
     def _calc_log_flux(self, val, zeropoint: float = None):
@@ -482,7 +493,7 @@ class StreamProperties:
             self.multifits_file = color_multifits_file
             print(f"... using {self.multifits_file} as colorfile!")
             self._color_measurement = True
-
+        print(f"measuring with pixel scale: {self._pixel_scale}")
         for aperture_properties in [
             ["FWHM", 1, 10],
             ["FWHM", 3, 10],
