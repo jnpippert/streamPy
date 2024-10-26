@@ -330,11 +330,15 @@ class Model:
             return -1
 
         if self._head is not None:
+            # print(
+            #     f"Head distance = {self._tail_dist} ({box_center.x},{box_center.y} # {self._head.x},{self._head.y})"
+            # )
             if box_center.isclose(self._head, tol=self._tol):
                 self._head_dist -= 1
 
             if self._head_dist == 0:
                 print("head reached. segment terminated.")
+                self._head = None
                 return -1
 
         if self._tail is not None:
@@ -342,6 +346,7 @@ class Model:
                 self._tail_dist -= 1
             if self._tail_dist == 0:
                 print("tail reached. segment terminated.")
+                self._tail = None
                 return -1
 
         if bruteforce:
