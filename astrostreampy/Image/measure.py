@@ -546,7 +546,8 @@ class StreamProperties:
         header += "r_eff r_eff_err "
         header += "l l_err "
         header += "w w_err "
-        header += "z mu dL kpcscale\n"
+        header += "z mu dL kpcscale "
+        header += "filter\n"
 
         data = f"{self._surface_brightness} {self._surface_brightness_error[0]} {self._surface_brightness_error[1]} "
         data += f"{self._apparent_magnitude} {self._apparent_magnitude_error[0]} {self._apparent_magnitude_error[1]} "
@@ -558,8 +559,8 @@ class StreamProperties:
         data += f"{self._effective_radius} {self._effective_radius_error} "
         data += f"{self._length} {self._length_error} "
         data += f"{self._width} {self._width_error} "
-        data += f"{self._redshift} {self._distance_modulus} {self._luminosity_distance} {self._kpc_scale}"
-
+        data += f"{self._redshift} {self._distance_modulus} {self._luminosity_distance} {self._kpc_scale} "
+        data += f"{self._filter}"
         file = open(filename, "w", encoding="utf-8")
         file.writelines([header, data])
         file.close()
