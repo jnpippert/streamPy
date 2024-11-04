@@ -11,7 +11,7 @@ from astropy.io import fits
 from astrostreampy.BuildModel.aperture import fwhm_mask_from_paramtab
 from astrostreampy.Image.measure import StreamProperties
 
-__all__ = ["calculate_color", "select_colorfile", "measure"]
+__all__ = ["measure_color", "select_colorfile", "measure"]
 
 
 class _ColorProperties:
@@ -36,6 +36,18 @@ class _ColorProperties:
         self.filter = self._data["filter"]
 
 
+def _mv_func(g: float, gr: float):
+    # Computes the visual magnitude from the g band brightness
+    # and the g-r color.
+    return g - 0.59 * gr + 0.0269
+
+
+def _lum_func(mv: float):
+    # Computes the solar luminosities from the visual magnitude
+    # and the visiual birghtness of the sun.
+    return 10 ** (0.4 * (4.83 - mv))
+
+
 def select_colorfile():
     # TODO docstring
     # TODO create plot to interactively choose the best
@@ -55,11 +67,14 @@ def measure_color(measurements: list[str], filename: str):
             # load data in pairs for the color calculation
             a = cps[i - 1]
             b = cps[i]
-            header += f"{a.filter}-{b.filter}"
-            res += f"{a.mtot}-{b.mtot}"
+            header += f"{a.filter}-{b.filter} "
+            res += f"{a.mtot}-{b.mtot} "
             i += 1
-
-    raise NotImplementedError
+            if f"{a.filter}-{b.filter}" == "g-r":
+                mv = _mv_func(a.mtot, a.mtot - b.mtot)
+                lum = _lum_func(mv)
+                header += "M_V L_S "
+                res += f"{mv} {lum} "
 
 
 def measure(
