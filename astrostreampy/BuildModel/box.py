@@ -186,10 +186,9 @@ class Box:
         vals = grid / sigma
         h4_comp = h4v * (c4_1 * vals**4 - c4_2 * vals**2 + c4_3)
         h2_comp = h2v * (c2_1 * vals**2 - c2_2)
+        skew_comp = skewv * scn.cdf(grid, scale=sigma)
         model = (
-            norm
-            * np.exp(-0.5 * vals**2)
-            * (1 + h2_comp + h4_comp + scn.cdf(skewv * vals))
+            norm * np.exp(-0.5 * vals**2) * (1 + h2_comp + h4_comp + skew_comp)
         ) + offset
 
         if self._psf is None:
