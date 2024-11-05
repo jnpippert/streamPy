@@ -105,11 +105,13 @@ def model():
 
     # the '_' are the border mask and a 1d center mask (the peaks of the Gaussians)
     aperture_mask, _, _ = fwhm_mask_from_paramtab(
-        f"mod_{args.output}_paramtab.fits", f"mod_{args.output}_multifits.fits"
+        f"mod_{args.output}_paramtab.fits",
+        f"mod_{args.output}_multifits.fits",
+        verbose=1,
     )
 
     fits.append(f"mod_{args.output}_multifits.fits", aperture_mask)
-    Slice(f"{args.output}_multifits.fits", f"{args.output}_paramtab.fits")
+    Slice(f"mod_{args.output}_multifits.fits", f"mod_{args.output}_paramtab.fits")
 
     # Measure the Stream
     s = StreamProperties(
