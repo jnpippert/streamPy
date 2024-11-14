@@ -274,6 +274,10 @@ class StreamProperties:
         self._data_flux = np.sum((self._data - self._background) * self._aperture)
         self._dimmed_data_flux = self._data_flux * (1 + self._redshift) ** 4
         self._error_flux = np.sqrt(np.sum(np.square(self._error_data * self._aperture)))
+        # TODO add future logger to log something like this
+        print(f"[INFO] Data Flux = {self._data_flux}")
+        print(f"[INFO] Dimmed Data Flux = {self._dimmed_data_flux}")
+        print(f"[INFO] Error Flux = {self._error_flux}")
 
     def _calc_bg_from_offsets(self):
         if np.isnan(np.mean(self._parameter_table[f"offset_{self._filter}_err"])):
@@ -389,12 +393,20 @@ class StreamProperties:
         self._effective_radius_error = 2 * self._pixel_scale * self._kpc_scale
 
     def _set_error_data(self, errorfile: str = None) -> None:
-        if isinstance(errorfile, str):
-            self._error_data = fits.getdata(errorfile)
+        try:
+            print(f"[INFO] Got error data from {errorfile}")
+            self._error_data = np.nan_to_num(fits.getdata(errorfile),nan=0)
+        except:
+            print("[INFO] No errorfile given!")
 
     def _prepare(self, measure_model: bool = False):
         if not measure_model:
             self._create_fillmask()
+            if self._color_measurement:
+                print(
+                    "[INFO] Masking pixel from source and int masks and multiply onto aperture"
+                )
+                self._aperture *= self._fillmask
             self._fill_zero_pixels()
         self._flux_inside_aperture()
 
