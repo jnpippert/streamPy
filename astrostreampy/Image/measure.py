@@ -395,7 +395,7 @@ class StreamProperties:
     def _set_error_data(self, errorfile: str = None) -> None:
         try:
             print(f"[INFO] Got error data from {errorfile}")
-            self._error_data = np.nan_to_num(fits.getdata(errorfile),nan=0)
+            self._error_data = np.nan_to_num(fits.getdata(errorfile), nan=0)
         except:
             print("[INFO] No errorfile given!")
 
