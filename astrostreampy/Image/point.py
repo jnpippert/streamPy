@@ -126,7 +126,7 @@ class InitBox(Point):
         data = np.nan_to_num(data, nan=0)
 
         # calculate cut levels
-        vmin, vmax = np.percentile(data, (5, 95))
+        vmin, vmax = np.nanpercentile(data, (5, 95))
 
         # initialize plot
         fig, ax = plt.subplots()
@@ -143,13 +143,14 @@ class InitBox(Point):
 
         # initialize vmin slider
         ax_vmin = fig.add_axes([0.2, 0.07, 0.7, 0.03])
+
         vmin_slider = Slider(
             ax=ax_vmin,
             label="shadows",
             valmin=np.min(data),
             valmax=np.max(data),
             valinit=vmin,
-            valstep=vmin / 10,
+            valstep=abs(vmin) / 10,
         )
         vmin_slider.on_changed(self._update)
 
@@ -161,7 +162,7 @@ class InitBox(Point):
             valmin=np.min(data),
             valmax=np.max(data),
             valinit=vmax,
-            valstep=vmax / 10,
+            valstep=abs(vmax) / 10,
         )
         vmax_slider.on_changed(self._update)
 

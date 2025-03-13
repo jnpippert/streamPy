@@ -232,11 +232,22 @@ class Model:
         self.masked_original_data = masked_data
         self.sourcemask = sourcemask
 
-        self._filter = header["FILTER"]  # Filter band the image was taken in.
-        pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
-        psf = header["PSF"]  # Mean FWHM in arcseconds of all image PSF's.
-        self._seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
+        try:
+            self._filter = header["FILTER"]  # Filter band the image was taken in.
+        except KeyError as e:
+            print(f"warning: set filter to None. {e}")
+            self._filter = "None"
 
+        pxscale = header["PXSCALE"]  # Pixelscale of the image in arcseconds/pixel.
+
+        try:
+            psf = header["PSF"]  # Mean FWHM in arcseconds of all image PSF's.
+            self._seeing = psf / pxscale / (2 * np.sqrt(2 * np.log(2)))
+        except KeyError as e:
+            psf = None
+            self._seeing = None
+            print(f"warning: set psf to None. {e}")
+            print("info: disabled convolutional fitting")
         print(f"using psf fhwm: {psf} [arcsec]")
         print(f"using pxscale: {pxscale} [arcsec / pixel]")
 

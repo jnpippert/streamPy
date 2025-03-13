@@ -11,12 +11,13 @@ from astropy.io import fits
 from astrostreampy.BuildModel.aperture import fwhm_mask_from_paramtab
 from astrostreampy.Image.measure import StreamProperties
 
-__all__ = ["measure_color", "select_colorfile", "measure"]
+__all__ = ["measure"]
 
 
 class _ColorProperties:
     # TODO docstring
     def __init__(self, measurement: str):
+        raise NotImplementedError
         try:
             with open(measurement, encoding="utf-8") as f:
                 header = f.readline().lstrip("#").strip()
@@ -37,26 +38,29 @@ class _ColorProperties:
 
 
 def _mv_func(g: float, gr: float):
+    raise NotImplementedError
     # Computes the visual magnitude from the g band brightness
     # and the g-r color.
     return g - 0.59 * gr + 0.0269
 
 
 def _lum_func(mv: float):
+    raise NotImplementedError
     # Computes the solar luminosities from the visual magnitude
     # and the visiual birghtness of the sun.
     return 10 ** (0.4 * (4.83 - mv))
 
 
-def select_colorfile():
+def _select_colorfile():
     # TODO docstring
     # TODO create plot to interactively choose the best
     # TODO aperture from the models in different filters
     raise NotImplementedError
 
 
-def measure_color(measurements: list[str], filename: str):
+def _measure_color(measurements: list[str], filename: str):
     # TODO docstring
+    raise NotImplementedError
     cps = [_ColorProperties(m) for m in measurements]  # cps = color properties
     res = ""
     header = "#"
@@ -83,7 +87,7 @@ def measure(
     color_multifitsfile: str,
     color_parameterfile: str,
     maskfiles: list[str],
-    errorfile: str,
+    errorfile: list[str],
     output: str = "streampy",
     zeropoint: float = None,
     zeropoint_type: str = "ZP",
@@ -91,7 +95,12 @@ def measure(
     pixelscale: float = None,
     overwrite: bool = False,
 ):
-    # TODO docstring
+    # TODO
+    # create stream instances from multifits and param file (TODO write class)
+    # measure in that class with the __init__
+    # pass both instances into the 'measure_color' method
+    # there select the best aperture, merges masks, measure the color!
+    # for Mv and Lsolar the people have to do it themselfes beacaus of different filter systems /conversions
 
     stream = StreamProperties(
         multifitsfile,
